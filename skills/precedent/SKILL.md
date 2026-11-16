@@ -97,7 +97,7 @@ End with the decision ledger. This table is the deliverable that makes the desig
 | Decision | Requirement it serves | Evidence | Where the evidence does not transfer | Simpler alternative | Revisit when |
 |---|---|---|---|---|---|
 
-- **Evidence** is record ids (`card-id#d1`), or `uncited`, or a URL marked `outside corpus`.
+- **Evidence** is record ids written in full (`tailscale-2021-control-plane-state#d1`, never a shortened form), or `uncited`, or a URL marked `outside corpus`.
 - **Where the evidence does not transfer** names the differences that matter: scale, workload, guarantees, team.
 - Close with the corpus version from the index and one line on coverage: which decisions had evidence at the user's scale, which had only larger-scale or unknown-scale evidence, and which had none.
 
