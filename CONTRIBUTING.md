@@ -5,7 +5,7 @@ A card makes claims about a named organisation's system, in public. The rules be
 ## Choosing a source
 
 - **Primary only.** A post by the people who built or operate the system, wherever it is published, or the operator's own post-mortem. Not a summary, an interview-preparation article, or product marketing.
-- **Prefer** migration posts ("why we moved from X to Y") and post-mortems. They report what forced the change and what worked before.
+- **Three kinds of source are all wanted:** a plain account of how a production system is built; a migration post ("why we moved from X to Y"), which reports what forced the change and what worked before; and a post-mortem. An architecture overview with no drama in it is a perfectly good card: fill `architecture` and `components`, and record each choice the post explains as a decision, with its reason in `rationale`.
 - **Small systems matter most.** A two-person team on one database is the evidence the corpus is shortest on. A source that states a small number outright (jobs per day, requests per second, people on the team) is worth more than another account of a system at vast scale.
 - **One card, one period.** If a post covers two eras at different scale, write a card for the one it is mainly about, or two cards sharing the source URL.
 
@@ -15,12 +15,13 @@ A card makes claims about a named organisation's system, in public. The rules be
 node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
 ```
 
-The script identifies itself honestly and refuses when `robots.txt` disallows it or the common AI crawlers. When it refuses, or the request fails, do not fetch the page any other way: no other user agent, no stealth browser, no cache or archive copy. A person may open the page in their own browser and save the text to that path by hand. Source text never goes in the repository.
+The script identifies itself honestly and refuses when `robots.txt` disallows all crawlers, this tool by name, or the agents AI assistants use to fetch a page for a user. Rules aimed only at training-data crawlers are not a refusal. When it refuses, or the request fails, do not fetch the page any other way: no other user agent, no stealth browser, no cache or archive copy. A person may open the page in their own browser and save the text to that path by hand. Source text never goes in the repository.
 
 Read the whole saved file before writing anything. Every fact in a card comes from that text, never from memory or a search snippet.
 
 ## Writing
 
+- **`components`** lists the main parts of the system and what each is for, as the source describes them: at most ten, each with its own locator. List what the source presents as the system's parts, not every technology it mentions.
 - **Our own words.** No copied sentences, and no quotation beyond a few words.
 - **Numbers exactly as stated.** Never computed, converted or rounded. "Millions of jobs" with no figure is not a metric.
 - **`null` when the source is silent.** An empty `rejected` list and null `forcing_condition`, `worked_before`, `cost_paid` and `outcome` are normal. Do not fill them from general knowledge.

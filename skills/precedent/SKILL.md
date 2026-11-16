@@ -48,11 +48,11 @@ If the user gives no numbers, ask once if they are available; otherwise assume t
 
 ### 2. Research
 
-Read `corpus/INDEX.md` in full; it is one line per record. Pick the records whose workload and topics match the decisions in front of you, then open their card files in `corpus/cards/` and read the whole record before using it. The index line is for triage only.
+Read `corpus/INDEX.md` in full. Its first table lists the systems in the corpus, one line each; the rest is one line per decision or failure record. Pick the systems whose workload matches the task and the records whose topics match the decisions in front of you, then open their card files in `corpus/cards/` and read the whole card before using it. The index is for triage only.
 
 Look for three things:
 
-- **A baseline:** a system of the same workload at or near the envelope's tiers. Its `architecture` is the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also treat records whose Shape is `single-node` or `single-database` as candidates, and say that the match is by footprint, not by measured scale.
+- **A baseline:** a system of the same workload at or near the envelope's tiers. Its `architecture`, and its `components` where the card lists them, are the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also treat records whose Shape is `single-node` or `single-database` as candidates, and say that the match is by footprint, not by measured scale.
 - **Decisions:** records for each real choice the task involves.
 - **Failures:** records for the components you are leaning towards.
 
