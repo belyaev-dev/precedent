@@ -9,6 +9,8 @@ Asked to design a backend, a model reaches for the interview answer: a gateway, 
 
 The evidence ships with this skill in `corpus/`. Start with [corpus/INDEX.md](corpus/INDEX.md).
 
+If the `precedent` MCP server is connected (tools named `precedent_search`, `precedent_get` and `precedent_facets`), use it for step 2 in place of reading the index: search with the envelope's tiers, then fetch in full every record you intend to rely on. It groups results by how their scale relates to yours; respect those groups. Everything else in this skill applies unchanged. If the server is unreachable or over its limit, fall back to the bundled corpus.
+
 ## The rules that matter
 
 - **Evidence checks the engineering; it does not replace it.** Design with everything you know. The records are there to cut components the scale does not call for, to test the design against real failures, and to show which claims rest on evidence. Ordinary good practice that no record happens to cover (signing requests, validating input, timeouts, retry schedules, alerts, lease renewal for long work) still belongs in the design.

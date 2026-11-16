@@ -221,31 +221,30 @@ The three CPU columns are different instruments. *Isolate* counts CPU-profiler s
 
 ## Deploying
 
-Nothing has been deployed, and no Cloudflare resource has been created. When the decisions below are made, deployment is:
+The server is live at `https://mcp.precedents.dev/mcp`, with the static corpus under `https://mcp.precedents.dev/corpus/`. It runs on a Cloudflare account used for nothing else, on the Free plan, from the `production` environment in `wrangler.jsonc`:
 
 ```bash
-npm ci && cd mcp && npm ci && npx wrangler deploy
+npm ci && cd mcp && npm ci && npx wrangler deploy --env production
 ```
 
-`wrangler deploy` runs the corpus build first, which validates the cards and stops on a failure, so what is deployed always matches a valid `cards/` in the checkout.
+`wrangler deploy` runs the corpus build first, which validates the cards and stops on a failure, so what is deployed always matches a valid `cards/` in the checkout. Deployment is manual for now: the endpoint serves the corpus as of its last deploy, and the corpus version in every response says which.
 
-Decisions it waits on:
+How production is set up:
 
-1. **Account.** `wrangler login`, or `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` in the environment.
-2. **Address.** As configured, the Worker is published at `precedent-mcp.<account subdomain>.workers.dev`. For a custom domain, add a `routes` entry with `custom_domain: true`, set `ALLOWED_HOSTNAMES` to that hostname (both are sketched in `wrangler.jsonc`) and set `workers_dev` to `false`. Browser pages may call the endpoint from its own origin (the hostname the request arrived on, and every hostname in `ALLOWED_HOSTNAMES`) and from local development origins. `ALLOWED_ORIGIN_HOSTNAMES` adds further hostnames to that list; it does not replace it. Clients that send no `Origin` (every non-browser client) are unaffected.
-3. **Rate limit.** `namespace_id` must be an integer not used by another rate limit in the account. The figure of 120 a minute is explained under [Limits](#limits).
-4. **The request quota**, below: whether to launch on `workers.dev` and accept the exposure, or on a custom domain with an edge rule.
-5. **Publishing the address.** Once deployed, the skill and the root README should name the endpoint and the static corpus.
+- **Address.** A custom domain only. `workers_dev` is off in the production environment, so there is no second address that skips the edge rule below.
+- **Origins.** `ALLOWED_HOSTNAMES` is the custom hostname. Browser pages may call the endpoint from that origin and from local development origins; `ALLOWED_ORIGIN_HOSTNAMES` would add more. Clients that send no `Origin` (every non-browser client) are unaffected.
+- **Edge rate limiting.** One rate limiting rule on the zone blocks a client address that sends more than 40 requests in 10 seconds to `/mcp`, for 10 seconds, before the request reaches the Worker. In a test of 150 requests over about five seconds, 101 were refused at the edge.
+- **Worker rate limiting.** The binding's 120 requests a minute per client, explained under [Limits](#limits).
 
 ### The request quota
 
-This is the main open risk, and nothing in this code removes it.
+This is the main open risk. Production narrows it; nothing removes it.
 
 - On the Free plan the account has 100,000 Worker requests a day. **Every request that reaches the Worker costs one**, including a request the Worker then rate-limits, refuses as too large, or answers with a 404.
 - So one caller can spend the whole day's quota and take `/mcp` down for everyone until the reset at midnight UTC. About 70 requests a minute sustained for a day is enough, and nothing stops a caller sending far more.
 - The per-client limiter does not prevent this: it runs inside the invocation it would have to prevent. It is also easy to sidestep. It counts an IPv6 client by its /64, but a caller with a /56 or a /48, which many providers hand out, has hundreds or tens of thousands of /64s to rotate through; and its counters are approximate and separate in each Cloudflare location.
 - The static corpus is not affected: a request for a file under `/corpus/` does not invoke the Worker and does not count. That is the fallback, and why the server's instructions name it before any limit is hit.
-- The mitigation is a custom domain with a rate limiting rule at Cloudflare's edge, which refuses requests before they become invocations, together with `workers_dev: false`. Without the second, the `workers.dev` address stays live, and a request to it still counts against the quota even when the handler refuses it for its host.
+- The edge rule described above refuses a flood before it becomes invocations, and `workers_dev: false` removes the address that would skip it. This narrows the exposure and does not close it: the Free plan's rule counts over 10 seconds, so a caller who stays under 40 requests per 10 seconds can still send far more than the 100,000 a day the account allows, and a caller with many addresses is not slowed at all. If that happens, `/mcp` is down until midnight UTC and the static corpus keeps working.
 
 ### Not verified from documentation
 
