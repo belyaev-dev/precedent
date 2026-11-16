@@ -1,6 +1,6 @@
 // Turning text into search terms. The same function runs over the cards at build time and over
 // the caller's query at request time. Nothing here interprets operators: a query is only ever
-// reduced to a short list of lower-case alphanumeric terms.
+// reduced to a short list of lower-case words made of letters and digits, in any script.
 
 export const MAX_QUERY_CHARS = 200;
 export const MAX_QUERY_TERMS = 12;
@@ -40,22 +40,27 @@ export function stem(word: string): string {
   return w;
 }
 
-function words(text: string): string[] {
+/** Letters, digits and the marks that belong to them, in any script. No punctuation, spaces, controls or format characters. */
+export const WORD = /[\p{L}\p{N}\p{M}]+/gu;
+
+function words(text: string): { kept: string[]; tooLong: number } {
   const plain = text
     .normalize("NFKD")
     .replace(/[\u0300-\u036f]/g, "")
     .toLowerCase();
-  const found: string[] = [];
-  for (const match of plain.matchAll(/[a-z0-9]+/g)) {
+  const kept: string[] = [];
+  let tooLong = 0;
+  for (const match of plain.matchAll(WORD)) {
     const word = match[0];
-    if (word.length >= 2 && word.length <= MAX_TERM_CHARS && !STOPWORDS.has(word)) found.push(word);
+    if (word.length > MAX_TERM_CHARS) tooLong += 1;
+    else if (word.length >= 2 && !STOPWORDS.has(word)) kept.push(word);
   }
-  return found;
+  return { kept, tooLong };
 }
 
-/** Lower-case alphanumeric terms, stemmed, without stopwords or single characters. Order kept, duplicates kept. */
+/** Lower-case terms, stemmed, without stopwords or single characters. Order kept, duplicates kept. */
 export function tokenize(text: string): string[] {
-  return words(text).map(stem);
+  return words(text).kept.map(stem);
 }
 
 export interface QueryTerm {
@@ -65,15 +70,27 @@ export interface QueryTerm {
   word: string;
 }
 
-/** The caller's query as at most MAX_QUERY_TERMS distinct terms, and how many further terms were dropped. */
-export function queryTerms(query: string): { terms: QueryTerm[]; dropped: number } {
+export interface Query {
+  terms: QueryTerm[];
+  /** Distinct terms beyond MAX_QUERY_TERMS, which were not searched. */
+  dropped: number;
+  /** Words over the length limit, which were not searched. */
+  tooLong: number;
+}
+
+/**
+ * The caller's query as at most MAX_QUERY_TERMS distinct terms. A word in any script is kept, so that a
+ * word the corpus lacks is reported as lacking instead of vanishing.
+ */
+export function queryTerms(query: string): Query {
+  const { kept, tooLong } = words(query.slice(0, MAX_QUERY_CHARS));
   const distinct = new Map<string, string>();
-  for (const word of words(query.slice(0, MAX_QUERY_CHARS))) {
+  for (const word of kept) {
     const term = stem(word);
     if (!distinct.has(term)) distinct.set(term, word);
   }
   const terms = [...distinct].map(([term, word]) => ({ term, word }));
-  return { terms: terms.slice(0, MAX_QUERY_TERMS), dropped: Math.max(0, terms.length - MAX_QUERY_TERMS) };
+  return { terms: terms.slice(0, MAX_QUERY_TERMS), dropped: Math.max(0, terms.length - MAX_QUERY_TERMS), tooLong };
 }
 
 const FUZZY_MIN = 5;

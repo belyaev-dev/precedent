@@ -1,7 +1,7 @@
 // Compiles parsed cards into the index the Worker serves. Runs at build time (scripts/build-corpus.mjs)
 // and in tests; never at request time.
 import { prefixKey, tokenize } from "./text.ts";
-import { AXES, type Card, type CardRecord, type CorpusIndex, type Doc, type Facets, type Fact, type Term, type Tombstone } from "./types.ts";
+import { AXES, type Axis, type Card, type CardRecord, type CorpusIndex, type Doc, type Facets, type Fact, type Term, type Tombstone } from "./types.ts";
 
 // How much a term counts by where it appears. Titles, aliases and tags are written to be searched;
 // the reviewer's notes count least, because they are not the source's claim.
@@ -57,8 +57,28 @@ function systemFields(card: Card): Weighted[] {
   ];
 }
 
-function bump(counts: Record<string, number>, key: string): void {
-  counts[key] = (counts[key] ?? 0) + 1;
+// Counts and lookups are keyed by strings that come from cards (tags, ids, terms). They are built in Maps
+// and turned into plain objects only at the end, as own properties, so a tag named "constructor" is a
+// tag like any other.
+type Counts = Map<string, number>;
+const bump = (counts: Counts, key: string): void => void counts.set(key, (counts.get(key) ?? 0) + 1);
+const plain = <V>(map: Map<string, V>): Record<string, V> => Object.fromEntries(map);
+
+/** What survives of a withdrawn card: the notice, field by field, and nothing else the file may still hold. */
+export function tombstoneOf(item: Tombstone): Tombstone {
+  return {
+    schema: 1,
+    id: item.id,
+    status: "retracted",
+    status_note: item.status_note,
+    retracted_at: item.retracted_at,
+    withdrawn_records: item.withdrawn_records,
+  };
+}
+
+/** The cards as they may be published in the static corpus: a withdrawn one is reduced to its tombstone. */
+export function publishable(parsed: (Card | Tombstone)[]): (Card | Tombstone)[] {
+  return parsed.map((item) => (item.status === "retracted" ? tombstoneOf(item) : item));
 }
 
 /** Throws if a card lacks what the server reads. Full validation is scripts/validate.mjs at the repository root. */
@@ -70,22 +90,14 @@ function assertServable(card: Card): void {
 }
 
 export function buildIndex(parsed: (Card | Tombstone)[], version: string, vocabulary: { workloads: Term[]; topics: Term[] }): CorpusIndex {
-  const cards: Record<string, Card> = {};
-  const tombstones: Record<string, Tombstone> = {};
+  const cards = new Map<string, Card>();
+  const tombstones = new Map<string, Tombstone>();
   const docs: Doc[] = [];
   const postings = new Map<string, Map<number, number>>();
-  const facets: Facets = {
-    systems: 0,
-    decisions: 0,
-    failures: 0,
-    withdrawn: [],
-    review_pending: 0,
-    workloads: {},
-    topics: {},
-    tech: {},
-    footprints: {},
-    tiers: { traffic: {}, data: {}, team: {} },
-  };
+  const withdrawn: string[] = [];
+  let [systems, decisions, failures, reviewPending] = [0, 0, 0, 0];
+  const counts = { workloads: new Map(), topics: new Map(), tech: new Map(), footprints: new Map() } satisfies Record<string, Counts>;
+  const tiers: Record<Axis, Counts> = { traffic: new Map(), data: new Map(), team: new Map() };
 
   const add = (doc: Doc, fields: Weighted[]): void => {
     const index = docs.push(doc) - 1;
@@ -102,50 +114,58 @@ export function buildIndex(parsed: (Card | Tombstone)[], version: string, vocabu
   for (const item of [...parsed].sort((a, b) => (a.id < b.id ? -1 : 1))) {
     if (item.status === "retracted") {
       // Only the notice survives. Nothing of a withdrawn card is indexed.
-      tombstones[item.id] = {
-        schema: 1,
-        id: item.id,
-        status: "retracted",
-        status_note: item.status_note,
-        retracted_at: item.retracted_at,
-        withdrawn_records: item.withdrawn_records,
-      };
-      facets.withdrawn.push(item.id);
+      tombstones.set(item.id, tombstoneOf(item));
+      withdrawn.push(item.id);
       continue;
     }
     assertServable(item);
-    cards[item.id] = item;
-    facets.systems += 1;
-    if (/^pending\b/i.test(item.review.reviewed_by)) facets.review_pending += 1;
-    for (const workload of item.workloads) bump(facets.workloads, workload);
-    if (item.footprint) bump(facets.footprints, item.footprint.shape);
-    for (const axis of AXES) bump(facets.tiers[axis], item.scale[axis] ? String(item.scale[axis].tier) : "unknown");
+    cards.set(item.id, item);
+    systems += 1;
+    if (/^pending\b/i.test(item.review.reviewed_by)) reviewPending += 1;
+    for (const workload of item.workloads) bump(counts.workloads, workload);
+    if (item.footprint) bump(counts.footprints, item.footprint.shape);
+    for (const axis of AXES) bump(tiers[axis], item.scale[axis] ? String(item.scale[axis].tier) : "unknown");
     const tech = new Set<string>((item.components ?? []).flatMap((c) => (c.tech ? [c.tech] : [])));
 
     add({ kind: "system", card: item.id, record: null }, systemFields(item));
     for (const record of item.records) {
-      facets[record.kind === "decision" ? "decisions" : "failures"] += 1;
-      for (const topic of record.topics) bump(facets.topics, topic);
+      if (record.kind === "decision") decisions += 1;
+      else failures += 1;
+      for (const topic of record.topics) bump(counts.topics, topic);
       for (const tag of record.tech) tech.add(tag);
       add({ kind: record.kind, card: item.id, record: record.id }, recordFields(item, record));
     }
-    for (const tag of tech) bump(facets.tech, tag);
+    for (const tag of tech) bump(counts.tech, tag);
   }
 
   const terms = [...postings.keys()].sort();
-  const prefixes: Record<string, string[]> = {};
+  const prefixes = new Map<string, string[]>();
   for (const term of terms) {
     const key = prefixKey(term);
-    if (key) (prefixes[key] ??= []).push(term);
+    if (!key) continue;
+    if (!prefixes.has(key)) prefixes.set(key, []);
+    prefixes.get(key)!.push(term);
   }
 
+  const facets: Facets = {
+    systems,
+    decisions,
+    failures,
+    withdrawn,
+    review_pending: reviewPending,
+    workloads: plain(counts.workloads),
+    topics: plain(counts.topics),
+    tech: plain(counts.tech),
+    footprints: plain(counts.footprints),
+    tiers: { traffic: plain(tiers.traffic), data: plain(tiers.data), team: plain(tiers.team) },
+  };
   return {
     version,
-    cards,
-    tombstones,
+    cards: plain(cards),
+    tombstones: plain(tombstones),
     docs,
     postings: Object.fromEntries(terms.map((term) => [term, [...postings.get(term)!.entries()]])),
-    prefixes,
+    prefixes: plain(prefixes),
     vocabulary,
     facets,
   };

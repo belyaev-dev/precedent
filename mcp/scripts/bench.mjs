@@ -9,8 +9,10 @@
 // Local numbers on a developer machine are not production numbers. Use them for the order of magnitude.
 // Usage: node scripts/bench.mjs [requests per scenario, default 400]
 import { execFileSync, spawn } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import worker from "../src/worker.ts";
@@ -33,7 +35,8 @@ const freePort = () =>
 
 const [port, inspectorPort] = [await freePort(), await freePort()];
 const origin = `http://127.0.0.1:${port}`;
-const dev = spawn(resolve(mcpDir, "node_modules/.bin/wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", String(inspectorPort)], {
+const stateDir = mkdtempSync(join(tmpdir(), "precedent-bench-"));
+const dev = spawn(resolve(mcpDir, "node_modules/.bin/wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", String(inspectorPort), "--persist-to", stateDir], {
   cwd: mcpDir,
   detached: true,
   stdio: "ignore",
@@ -43,6 +46,7 @@ const stop = () => {
   try {
     process.kill(-dev.pid, "SIGTERM");
   } catch {}
+  rmSync(stateDir, { recursive: true, force: true });
 };
 process.on("exit", stop);
 

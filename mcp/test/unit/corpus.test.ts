@@ -6,6 +6,8 @@ import { corpus, repoRoot } from "../helpers.ts";
 
 // These run against what `npm run build` compiled from the real cards.
 const publicDir = join(repoRoot, "mcp/public/corpus");
+/** wrangler.jsonc with its comments stripped. */
+const config = () => JSON.parse(readFileSync(join(repoRoot, "mcp/wrangler.jsonc"), "utf8").replace(/^\s*\/\/.*$/gm, ""));
 const skillIndex = readFileSync(join(repoRoot, "skills/precedent/corpus/INDEX.md"), "utf8");
 
 describe("the compiled corpus", () => {
@@ -53,7 +55,16 @@ describe("the static corpus", () => {
     expect(readFileSync(join(repoRoot, "mcp/public/_headers"), "utf8")).toMatch(/^\/corpus\/\*\n\s+Access-Control-Allow-Origin: \*/);
     expect(existsSync(join(repoRoot, "mcp/public/index.html"))).toBe(true);
     // Comments stripped, the configuration must leave run_worker_first unset, which means false.
-    const config = readFileSync(join(repoRoot, "mcp/wrangler.jsonc"), "utf8").replace(/^\s*\/\/.*$/gm, "");
-    expect(JSON.parse(config).assets).toEqual({ directory: "./public" });
+    expect(config().assets).toEqual({ directory: "./public" });
+  });
+});
+
+describe("the Worker's configuration", () => {
+  it("logs the Worker's own lines only: no invocation logs, and tracing explicitly off", () => {
+    expect(config().observability).toEqual({ enabled: true, logs: { invocation_logs: false }, traces: { enabled: false } });
+  });
+
+  it("limits each address to 120 requests a minute", () => {
+    expect(config().ratelimits).toEqual([{ name: "RATE_LIMITER", namespace_id: "1001", simple: { limit: 120, period: 60 } }]);
   });
 });

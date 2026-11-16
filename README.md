@@ -69,9 +69,9 @@ The skill ships with a copy of the cards so it works with no server.
 [`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. **It is not deployed yet**: it runs locally under `wrangler dev`, and deployment waits on the choice of account and address.
 
 - Three read-only tools: `precedent_search` (keywords plus kind, workload, topic, tech, footprint and the caller's scale envelope), `precedent_get` (up to eight records or systems per call) and `precedent_facets` (what the corpus covers).
-- Search groups hits as at the caller's scale, at a different scale, of unknown scale, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.
+- Search groups hits as at the caller's scale, at a different scale, of unknown scale, floor not checked, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.
 - Every result carries a ready citation, each fact's locator, "not stated in the source" for gaps, the card's review status and the corpus version. Withdrawn ids resolve to a notice.
-- The build also writes the corpus as static files, `/corpus/corpus.json` and one file per card, which are served without invoking the Worker.
+- The build validates the cards first and stops on a failure. It also writes the corpus as static files, `/corpus/corpus.json` and one file per card, which are served without invoking the Worker; a withdrawn card appears there as its tombstone only.
 - No model runs at request time and nothing is stored. The index is compiled into the Worker from `cards/` at build time.
 
 Tool parameters, example responses, limits, what is logged, measurements and the deployment steps are in [`mcp/README.md`](mcp/README.md).
@@ -118,7 +118,7 @@ node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-
 The server has its own package and tests:
 
 ```bash
-cd mcp && npm ci && npm test
+npm ci && cd mcp && npm ci && npm test
 ```
 
 `check-source` confirms that every number in a card, and every `Section:` or `Near:` locator, appears in the source text. Page and timestamp locators are not checked. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
