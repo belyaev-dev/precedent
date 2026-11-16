@@ -11,12 +11,13 @@ The evidence ships with this skill in `corpus/`. Start with [corpus/INDEX.md](co
 
 ## The rules that matter
 
+- **Evidence checks the engineering; it does not replace it.** Design with everything you know. The records are there to cut components the scale does not call for, to test the design against real failures, and to show which claims rest on evidence. Ordinary good practice that no record happens to cover (signing requests, validating input, timeouts, retry schedules, alerts, lease renewal for long work) still belongs in the design.
 - **Fit, not minimalism.** The aim is a design that meets every stated requirement at the stated scale with nothing extra. Dropping a requirement, or making the design work by assuming the user's numbers down, is a worse failure than an extra component.
 - **Numbers before design.** Establish the scale envelope first. A design without one cannot be checked against anything.
 - **No unions.** Do not add up the components of several references. One reference at the user's scale is the baseline; everything else has to earn its place.
 - **Every component is justified, including the obvious ones.** Each needs a requirement of this project and a record that supports it.
 - **Cite records, not memory.** A claim about how real systems behave is either tied to a record id or labelled `uncited`. Do not present general knowledge as evidence.
-- **Cite what the record says, not what you expect it to say.** Before relying on a record for a causal claim, re-read the field you are citing and state it the way the card does. A citation that reverses the card is worse than no citation.
+- **Cite what the record says, not what you expect it to say.** Open the card before citing it; an index line is never enough. Re-read the field you rely on and state it the way the card does, keeping every reason it gives and every limit it states. A citation that reverses or trims the card is worse than no citation.
 - **The cards are drafts.** A card whose `review.reviewed_by` says review is pending was checked by machine only. Say so once in the coverage line.
 - **Say when the corpus is silent.** It is small. "No record at this scale" is a finding to report, not a gap to paper over with a poorly matched card.
 
@@ -45,7 +46,7 @@ Map the first three to tiers:
 | 4 | under 100,000 | under 100 TB | over 150 |
 | 5 | 100,000 or more | 100 TB or more | |
 
-Use the user's numbers exactly as given; never reduce a stated figure to make a simpler design fit. If the user gives no numbers, ask once if they are available; otherwise assume tier 0 to 1 and say so. Never assume a large system. State the envelope back in one or two lines before going on.
+Use the user's numbers exactly as given; never reduce a stated figure to make a simpler design fit, and when you must derive a number the user did not give (how many requests create a job, how many endpoints an event fans out to), choose the demanding end of the plausible range and say so. If the user gives no numbers, ask once if they are available; otherwise assume tier 0 to 1 and say so. Never assume a large system. State the envelope back in one or two lines before going on.
 
 ### 2. Research
 
@@ -66,6 +67,10 @@ How to read a record:
 - A scale axis of `null` means unknown, not small. Unless its footprint says otherwise, such a record never counts as "a system at my scale".
 - `curator_notes`, a floor's `rationale` and a tier's `note` are the reviewer's reading, not the source's claim. Say so if you rely on one.
 - `null` in a field means the source did not say. Do not fill it in.
+- `aliases` and `tech` are search terms. They are not statements about the system and cannot be cited.
+- In a card about a change, `worked_before` and `forcing_condition` describe the old design, and `chosen` and `outcome` the new one. Say which you mean; do not describe the old design as what the organisation runs.
+- A record whose approach was tried and then removed is evidence against that approach, not a model for it. Read `outcome` and `cost_paid` before borrowing anything.
+- Metrics carry a `qualifier`. A request spike is not a sustained write rate, and a test-bench figure is not a production one. Team tier 0 means up to five people, not none.
 
 A mechanism transfers by its conditions, not by the size of the company. A large system's topology does not transfer to a small product. Its idempotency-key scheme or its bounded retry policy may, because the condition (retried requests must not double-apply) holds at any size.
 
@@ -95,15 +100,19 @@ Then the subtraction test: for every component the baseline did not have at this
 
 ### 5. Ledger
 
-The answer leads with the design itself, in enough detail to build from: the data model, the key statements and flows, and the mechanism behind each requirement. Evidence supports a design; it does not stand in for one. When space is short, shorten the ledger's prose, never the mechanisms.
+Write the answer in this order and with these proportions.
 
-End with the decision ledger. This table is what makes the design checkable; keep it compact, one line per decision.
+1. **The design, as most of the answer.** Enough for an engineer to start: the tables or keys that matter and their constraints, the main flows step by step, the concrete parameters (timeouts, retry schedule, limits, batch sizes), and the operational basics (what is alerted on, how a stuck or half-done unit of work is found and recovered). Cite a record inline, by full id, only where it shaped a choice; do not narrate the research.
+2. **Failure replay**, as a short table.
+3. **The decision ledger**, compact: one row for each decision that adds a component, leaves out one a reader would expect, or picks between real alternatives. Usually five to eight rows. Routine mechanisms do not need a row.
 
-| Decision | Requirement it serves | Evidence | Where the evidence does not transfer | Simpler alternative | Revisit when |
-|---|---|---|---|---|---|
+If length is limited, the ledger and the replay shrink first, and the design last.
+
+| Decision | Requirement | Evidence | Limits of the evidence | Revisit when |
+|---|---|---|---|---|
 
 - **Evidence** is record ids written in full (`tailscale-2021-control-plane-state#d1`, never a shortened form), or `uncited`, or a URL marked `outside corpus`.
-- **Where the evidence does not transfer** names the differences that matter: scale, workload, guarantees, team.
+- **Limits of the evidence** names what does not transfer, in a few words: scale, workload, guarantees, team.
 - Close with the corpus version from the index and one line on coverage: which decisions had evidence at the user's scale, which had only larger-scale or unknown-scale evidence, and which had none.
 
 Write decisions up as ADR files only when designing inside a repository that keeps them, or when asked.
