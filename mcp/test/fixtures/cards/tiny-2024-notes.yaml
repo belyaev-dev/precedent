@@ -1,0 +1,105 @@
+# SYNTHETIC TEST FIXTURE. Every fact is invented. Never served as evidence.
+# A small system with a tier on every axis: the only fixture that can be "at scale" for a T0 D0 O0 caller.
+schema: 1
+id: tiny-2024-notes
+title: Tiny runs its notes app on one machine with SQLite
+org: Tiny (fictional)
+system: Notes app
+architecture:
+  text: One process serving a notes app from a SQLite file on the same machine, with a nightly copy of the file to object storage.
+  locator: "Section: Setup"
+components:
+  - name: App server
+    role: Serves every request and runs scheduled work in the same process.
+    tech: rails
+    locator: "Section: Setup"
+  - name: Database file
+    role: Holds all application state on the local disk.
+    tech: sqlite
+    locator: "Section: Setup"
+as_of: "2024-03"
+evidence: production
+workloads: [crud-app]
+footprint:
+  shape: single-node
+  locator: "Section: Setup"
+scale:
+  traffic:
+    tier: 0
+    basis: stated
+  data:
+    tier: 0
+    basis: stated
+  team:
+    tier: 0
+    basis: stated
+  metrics:
+    - axis: traffic
+      name: requests
+      value: 4
+      unit: per second
+      qualifier: peak
+      locator: "Section: Numbers"
+    - axis: data
+      name: database file
+      value: 2
+      unit: GB
+      locator: "Section: Numbers"
+    - axis: team
+      name: engineers
+      value: 2
+      unit: people
+      locator: "Section: Numbers"
+source:
+  url: https://example.com/tiny-notes
+  archive_url: null
+  title: How we run Tiny
+  publisher: Example Engineering (fictional)
+  published: "2024-04-02"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: hand-written fixture
+  reviewed_by: Ada Example
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, capacity-cost]
+    title: Keep everything in one SQLite file instead of running a database server
+    chosen:
+      text: All state lives in a single SQLite file next to the application.
+      locator: "Section: Setup"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: The two engineers wanted nothing to operate beyond the application itself.
+      locator: "Section: Why"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - embedded database
+      - no database server
+      - boring stack
+    tech: [sqlite]
+  - id: f1
+    kind: failure
+    topics: [backup-restore]
+    title: Nightly copy of the database file was taken mid-write and could not be restored
+    trigger: null
+    mechanism:
+      text: The backup job copied the database file while a write was in progress, so the copy was inconsistent.
+      locator: "Section: The bad backup"
+    why_defences_failed: null
+    impact: null
+    fix:
+      text: "Planned: take backups through the online backup interface and restore one every week."
+      locator: "Section: The bad backup"
+    aliases:
+      - corrupt backup
+      - restore never tested
+    tech: [sqlite]
