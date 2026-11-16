@@ -1,0 +1,117 @@
+schema: 1
+id: letsencrypt-2020-database-servers
+title: Let's Encrypt keeps issuance on one MariaDB primary and buys faster servers rather than shard it
+org: Let's Encrypt
+system: Certificate issuance database
+architecture:
+  text: "The CA software, Boulder, runs against a single MariaDB database using InnoDB. Several replicas are kept and some read operations are sent to them to reduce load on the primary."
+  locator: "Section: What exactly are we doing with these servers?"
+as_of: "2020"
+evidence: production
+workloads: [crud-app]
+footprint:
+  shape: single-database
+  locator: "Near: We run the CA against a single database"
+scale:
+  # The post gives no request rate, no stored-data size and no team size (it mentions an SRE team only).
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: websites Let's Encrypt provides certificates to
+      value: 235
+      unit: million websites
+      qualifier: more than; at publication in January 2021; not a request rate
+      locator: "Near: more than 235 million websites"
+    - axis: other
+      name: average CPU use of the old primary database server
+      value: 90
+      unit: percent
+      qualifier: over; averaged in the week before the primary was replaced
+      locator: "Near: its CPU usage (from /proc/stat) averaged over 90%"
+source:
+  url: https://letsencrypt.org/2021/01/21/next-gen-database-servers
+  archive_url: null
+  title: The Next Gen Database Servers Powering Let's Encrypt
+  publisher: Let's Encrypt (Internet Security Research Group)
+  author: Josh Aas and James Renken
+  published: "2021-01-21"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-partitioning, capacity-cost]
+    title: Run the whole certificate authority against one database and scale the hardware instead of sharding
+    chosen:
+      text: "The CA runs against a single MariaDB database, with replicas taking some reads to reduce load on the primary."
+      locator: "Section: What exactly are we doing with these servers?"
+    rejected:
+      - option: Shard or split the data into several databases
+        reason: "Not needed so far because hardware advances have kept one database workable; the authors say it may eventually be required."
+        locator: "Section: What exactly are we doing with these servers?"
+    forcing_condition: null
+    rationale:
+      text: "A single database minimises complexity, which the authors say is good for security, reliability and reducing maintenance burden."
+      locator: "Section: What exactly are we doing with these servers?"
+    worked_before: null
+    cost_paid:
+      text: "Because everything runs on one database, the database machines have to be powerful."
+      locator: "Section: What exactly are we doing with these servers?"
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "The post says the CA software, Boulder, is designed to work with a single MySQL, MariaDB or Percona database."
+    aliases:
+      - single database certificate authority
+      - avoid sharding with bigger hardware
+      - read replicas to offload primary
+      - scale up before scaling out
+      - one primary many replicas
+    tech: [mariadb, innodb, boulder]
+  - id: d2
+    kind: decision
+    topics: [capacity-cost]
+    title: Replace the database servers with two-CPU EPYC machines holding 24 NVMe drives under OpenZFS
+    chosen:
+      text: "New 2U servers with two AMD EPYC 7542 CPUs (64 cores), 2TB of memory and 24 NVMe drives replaced servers with two Intel Xeon E5-2650 CPUs (24 cores), 1TB of memory and 24 SATA SSDs."
+      locator: "Section: Hardware Specifications"
+    rejected:
+      - option: Hardware RAID-10, as on the previous generation
+        reason: "There is no effective hardware RAID for NVMe drives."
+        locator: "Section: OpenZFS and NVMe"
+      - option: Linux software RAID (mdraid)
+        reason: "The team received several recommendations for OpenZFS and decided to try it; the post does not say why mdraid lost."
+        locator: "Section: OpenZFS and NVMe"
+    forcing_condition:
+      text: "In the week before the upgrade the primary's CPU usage averaged over 90%, which the authors read as the old CPUs reaching their limit."
+      locator: "Section: Performance Impact"
+    rationale:
+      text: "The aim was to more than double almost every performance metric in the same 2U form factor, since the previous hardware was powerful but regularly pushed to its limits."
+      locator: "Section: Hardware Specifications"
+    worked_before:
+      text: "The previous generation of database hardware was powerful but was regularly being pushed to its limits."
+      locator: "Section: Hardware Specifications"
+    cost_paid:
+      text: "The equipment is quite expensive, and planning and executing the transition was a sizable undertaking for the SRE team."
+      locator: "Section: Conclusion"
+    outcome:
+      text: "The new machine was promoted from replica to primary on September 15. Median API request time fell from about 90 ms to about 9 ms, the primary's CPU went from over 90% to about 25%, and average query response time from about 0.45 ms to about 0.15 ms."
+      locator: "Section: Performance Impact"
+    applies_from: null
+    curator_notes:
+      - "The post gives no query or issuance rate, so the load these servers carry cannot be read from it; the authors say database performance is the most critical factor in their ability to scale within service level objectives."
+    aliases:
+      - vertical scaling a single database
+      - nvme database server
+      - openzfs for database storage
+      - upgrade database hardware instead of sharding
+      - database cpu above 90 percent
+    tech: [mariadb, openzfs, nvme]

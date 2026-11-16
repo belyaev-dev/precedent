@@ -1,0 +1,126 @@
+schema: 1
+id: healthchecks-2025-ping-ingest
+title: Healthchecks.io batches ping writes into one Postgres transaction for throughput and now handles cron-driven spikes of over 11,000 requests a second
+org: Healthchecks.io
+system: Ping ingest endpoints (hc-ping.com)
+architecture:
+  text: "The hosted service's ping endpoints run a closed-source Go application on three physical servers. Each request is validated and queued on an in-process channel, and workers write it to a PostgreSQL database that runs on a separate server."
+  locator: "Near: the database runs on a separate server"
+as_of: "2025"
+evidence: production
+workloads: [job-queue]
+footprint:
+  shape: single-database
+  locator: "Near: the database runs on a separate server"
+scale:
+  # The spike figure is read from production logs. The post says nothing about team size or stored data,
+  # so those axes stay empty. The source writes the number as 11'000, which check-source cannot parse
+  # as 11000, so the value is carried as 11 with the unit "thousand requests per second".
+  traffic:
+    tier: 4
+    basis: stated
+    note: "The post reports spikes of over 11,000 requests per second seen in production logs, which falls in tier 4 (10,000 to under 100,000)."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: ping request spikes handled by the batching handler
+      value: 11
+      unit: thousand requests per second
+      qualifier: over; spikes read from production logs; the source writes the figure with an apostrophe as 11'000
+      locator: "Near: spikes of over 11’000 requests per second"
+    - axis: other
+      name: average ping writes to the database
+      value: 500
+      unit: requests per second
+      qualifier: approximate; average
+      locator: "Near: On average we write ~500 ping requests/second"
+    - axis: other
+      name: ping writes at the start of every minute
+      value: 4000
+      unit: pings per second
+      qualifier: around; cron-driven spike
+      locator: "Near: start of every minute, we write around"
+    - axis: other
+      name: throughput of the earlier per-ping stored-procedure path
+      value: 5000
+      unit: requests per second
+      qualifier: around; cumulative across 12 writer processes on three servers
+      locator: "Near: could cumulatively achieve around 5000 requests per second"
+source:
+  url: https://blog.healthchecks.io/hp-rewrite/bf06cebbc38cf970ad875452dfe22ad8
+  archive_url: null
+  title: Throughput Upgrade (With Train Illustrations!)
+  publisher: Healthchecks.io blog
+  author: Pēteris Caune
+  published: "2025-07-24"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, capacity-cost]
+    title: Batch ping writes with COPY in one transaction instead of calling a stored procedure once per ping
+    chosen:
+      text: "Rewrote the Go handler's database path to batch. A worker gathers jobs until it holds 100 or 5 ms has passed, then one transaction runs a single SELECT for the batch, pipelined UPDATEs per check and one COPY insert for the pings, in plain SQL instead of stored procedures."
+      locator: "Section: Batching, Take Two"
+    rejected:
+      - option: Batching through a PL/pgSQL stored procedure that loops over an array of jobs (the 2024 first attempt)
+        reason: "It needed an array of a custom composite type, was tedious to debug through nested procedures, gave only a mild throughput gain, and a serious bug forced a hurried rollback."
+        locator: "Section: Batching, First Attempt"
+    forcing_condition: null
+    rationale:
+      text: "Throughput was the aim. Web servers scale out but the database is a write bottleneck, so the author moved logic out of PostgreSQL into Go and chose COPY, which the pgx documentation says can beat INSERT with as few as five rows."
+      locator: "Section: Batching, Take Two"
+    worked_before:
+      text: "A worker called one stored procedure per ping over one connection, with one round trip in simple cases. Workers per server grew from one to two in 2021, three in 2024 and four in 2025; 12 processes across three servers reached around 5000 requests per second."
+      locator: "Near: This setup was working quite well!"
+    cost_paid:
+      text: "The rewrite took about a month and added cases to handle: sorting jobs consistently to avoid deadlocks, looking up checks by slug, creating checks on the fly, and re-running a transaction after a reconnect without losing or duplicating pings."
+      locator: "Section: Batching, Take Two"
+    outcome:
+      text: "The live version adds a second worker because batching trades some latency for throughput. Logs show spikes of over 11’000 requests per second with no significant backlog. Production was not benchmarked; on the author's dev machine it passed 20’000 requests per second."
+      locator: "Section: Batching, but with Two Workers"
+    applies_from: null
+    curator_notes:
+      - "The post reports no backlog or outage under the old design and gives no reason beyond wanting more throughput. It reports hourly spikes of over 10’000 pings per second and an old ceiling of around 5000, but does not link the two."
+      - "No team size is stated, so no team tier is set. The 20’000 figure is a dev-machine benchmark."
+    aliases:
+      - batch inserts to postgres
+      - copy instead of insert
+      - write spikes at the top of the hour
+      - cron job spiky traffic
+      - postgres write bottleneck
+      - ingest endpoint throughput
+    tech: [go, postgres, pgx]
+  - id: d2
+    kind: decision
+    topics: [caching, load-shedding-backpressure]
+    title: Cache not-found results for UUID ping URLs so repeated pings to missing checks skip the database
+    chosen:
+      text: "When a client pings a check that does not exist, the Go app returns a 404 and caches that fact, so later requests for the same URL are answered without touching the database. This is done only for UUID URLs, not slug URLs."
+      locator: "Near: also caches this fact"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "UUIDs are assigned randomly and clients cannot pick them, so a UUID with no check behind it today can be presumed to stay unused later on. Slugs can be chosen by clients, so they are excluded."
+      locator: "Near: UUIDs are assigned randomly, and clients cannot pick"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "The post gives no measurement of how many requests this absorbs, so the benefit is described but not quantified."
+    aliases:
+      - negative caching
+      - cache 404 responses
+      - ping to nonexistent check
+      - misconfigured client floods missing urls
+      - protect database from bad urls
+    tech: [go, postgres]

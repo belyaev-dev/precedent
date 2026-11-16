@@ -1,0 +1,104 @@
+schema: 1
+id: fathom-2021-singlestore-database
+title: Fathom Analytics drops DynamoDB for one SingleStore database, then fixes connection overhead from per-request Lambda connections
+org: Fathom Analytics
+system: Pageview ingest and application database
+architecture:
+  text: "Fathom's ingest point runs on Laravel Vapor and writes pageviews to SQS. SingleStore handles everything else over persistent connections, including tens of thousands of inserts per second, all key/value lookups and application rate limiting."
+  locator: "Section: Conquering unscalable infrastructure design"
+as_of: "2021-09"
+evidence: production
+workloads: [analytics-pipeline]
+footprint:
+  shape: single-database
+  locator: "Near: a single database for our entire application"
+scale:
+  # The post says "tens of thousands" of inserts per second as what the cluster can do, which is a
+  # capability and not a stated production peak, so no traffic tier. "A small team" gives no number.
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://usefathom.com/blog/ditched-dynamodb
+  archive_url: null
+  title: Why we ditched DynamoDB
+  publisher: Fathom Analytics blog
+  author: Jack Ellis
+  published: "2021-09-29"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, capacity-cost, load-shedding-backpressure]
+    title: Stop using DynamoDB and serve key/value lookups, ingest and rate limiting from one fixed-size SingleStore cluster
+    chosen:
+      text: "Fathom stopped using DynamoDB, which it had planned to adopt fully, and moved the key/value lookups onto the SingleStore cluster the application already used. SQS stays in front of ingest."
+      locator: "Section: Conquering unscalable infrastructure design"
+    rejected:
+      - option: Raise prices on the larger plans
+        reason: "Fathom would then not be competitive on price, and it serves high-traffic small and medium businesses who cannot spend a lot on software."
+        locator: "Section: $3,000 in savings"
+    forcing_condition: null
+    rationale:
+      text: "DynamoDB costs rose fast as bigger customers arrived and would have squeezed margins on larger plans. SingleStore was a fixed monthly cost that could take very high throughput."
+      locator: "Section: $3,000 in savings"
+    worked_before: null
+    cost_paid:
+      text: "A huge traffic spike beyond SingleStore's throughput would only build a temporary backlog of pageviews in SQS, and the author expects to have to increase the SingleStore bill at some point."
+      locator: "Section: $3,000 in savings"
+    outcome:
+      text: "DynamoDB cost dropped to around $0.02 a day while the SingleStore bill did not increase. The author calls the setup very stable for now."
+      locator: "Section: $3,000 in savings"
+    applies_from: null
+    curator_notes:
+      - "This reverses the plan, which the post says Fathom had been publicly excited about for over a year, to put its entire database into DynamoDB. Apart from the section heading '$3,000 in savings', the post gives no DynamoDB cost figure, so how large the cost problem was is unknown."
+    aliases:
+      - dynamodb too expensive
+      - one database for the whole application
+      - drop dynamodb
+      - fixed cost database instead of pay per request
+      - key value lookups in sql database
+      - sqs buffer in front of database
+    tech: [dynamodb, singlestore, sqs]
+  - id: d2
+    kind: decision
+    topics: [capacity-cost, async-processing]
+    title: Keep database connections open by moving the dashboard and queue off per-request Lambda connections
+    chosen:
+      text: "The ingest point stayed on Laravel Vapor writing to SQS, while the dashboard (private API, jobs) and the collector queue moved to Heroku, so they could hold persistent database connections instead of opening one per request."
+      locator: "Section: Conquering unscalable infrastructure design"
+    rejected:
+      - option: Switch to SingleStore's HTTP API, which pools connections
+        reason: "There was no time to perform the refactor."
+        locator: "Section: Conquering unscalable infrastructure design"
+    forcing_condition:
+      text: "Every request, pageview or event invoked a Lambda that opened a connection, ran one query and closed it, which put significant CPU overhead on the SingleStore cluster, as its vendor's team pointed out."
+      locator: "Section: Conquering unscalable infrastructure design"
+    rationale: null
+    worked_before:
+      text: "Opening and closing a connection per request is how the author always built applications, and it works well at low scale."
+      locator: "Section: Conquering unscalable infrastructure design"
+    cost_paid:
+      text: "The move took some work."
+      locator: "Section: Conquering unscalable infrastructure design"
+    outcome:
+      text: "CPU overhead on the cluster fell by 60-80%. An update to the post says Laravel Vapor allowed persistent connections in queues less than 24 hours after publication, and the queue moved back to Vapor."
+      locator: "Section: Conquering unscalable infrastructure design"
+    applies_from: null
+    curator_notes:
+      - "The post gives no other drawback of the move."
+    aliases:
+      - lambda database connection overhead
+      - connection per request cpu cost
+      - persistent database connections
+      - serverless connection pooling
+      - open and close connection each request
+    tech: [laravel-vapor, lambda, singlestore, heroku, sqs]

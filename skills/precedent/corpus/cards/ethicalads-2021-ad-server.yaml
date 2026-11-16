@@ -1,0 +1,119 @@
+schema: 1
+id: ethicalads-2021-ad-server
+title: EthicalAds runs its ad server as a tuned Django app at about 60 requests a second, picks hosting by load test, then changes it
+org: EthicalAds
+system: Ad server
+architecture:
+  text: "A separate Django ad server, split out of the Read the Docs code line in late 2019, with Postgres as the source of truth and Redis for caching. Most traffic is a few APIs such as requesting and viewing an ad. It runs on autoscaled VM scale sets, usually 3-4 instances."
+  locator: "Near: scaled to about 3-4 instances"
+as_of: "2021"
+evidence: production
+workloads: [crud-app]
+footprint:
+  shape: single-database
+  locator: "Near: is what is in our Postgres database"
+scale:
+  # Peak is stated for normal load. The team figure is for late 2019, when the ad server was split out,
+  # not for 2021, so it stays a context metric and the team tier is empty.
+  traffic:
+    tier: 1
+    basis: stated
+    note: "The post gives a normal-load peak of about 60 requests per second (tier 1, under 100). Unusual spikes are covered only by a pointer to a separate followup post, not in this one."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: ad server peak under normal load
+      value: 60
+      unit: requests per second
+      qualifier: approximate; normal peak, not unusual spikes; the post gives it as 3,500 requests per minute
+      locator: "Near: peaks at about 3,500 requests per minute"
+    - axis: other
+      name: team size when the ad server was split out
+      value: 5
+      unit: people
+      qualifier: small team in late 2019, not at publication
+      locator: "Near: small team (of 5 at that time)"
+    - axis: other
+      name: staging load test ceiling
+      value: 100
+      unit: requests per second
+      qualifier: siege test on staging deployments of Heroku and Azure AppService, not production
+      locator: "Near: at various loads up to 100 ad requests"
+source:
+  url: https://www.ethicalads.io/blog/2021/07/handling-100-requests-per-second-with-python-django/
+  archive_url: null
+  title: Handling 100 Requests Per Second with Python & Django
+  publisher: EthicalAds blog
+  author: David Fischer
+  published: "2021-07-27"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [service-boundaries, capacity-cost]
+    title: Split the ad server out of the Read the Docs app and tune Django query by query instead of rewriting it
+    chosen:
+      text: "The ad server became its own Django service. The team profiled New Relic traces and each Postgres query in Django Debug Toolbar, and added unit tests that fail if the number of database queries in the main APIs changes."
+      locator: "Section: Breaking out the ad server"
+    rejected:
+      - option: A from-scratch rewrite in a more performant language
+        reason: "The team did not want to rewrite, and strongly wanted a setup like Read the Docs that its small team of 5 at the time already knew well."
+        locator: "Section: Breaking out the ad server"
+    forcing_condition:
+      text: "From its first day the separate server would have to take around 20-30 requests per second, with spikes that could reach 60 or more, so the team put heavy effort into app performance."
+      locator: "Near: need to handle around 20-30 requests per second"
+    rationale:
+      text: "The team wanted the ad server as its own service ahead of launching the ad network, and wanted to stay on a setup close to Read the Docs, which its team knew well."
+      locator: "Section: Breaking out the ad server"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "At publication New Relic shows p50 of 58 ms and p99 of 105 ms over a normal week. About 20 ms of a normal request is spent in Python and the rest in Postgres and Redis, from which the author argues replacing Django and Python could save at most 10-15 ms."
+      locator: "Near: New Relic reports our p50 at 58ms"
+    applies_from: null
+    curator_notes:
+      - "The 20 ms Python share and 10-15 ms ceiling are the author's own reading of their traces, not a test of another language; that passage is under Section: Performance today."
+    aliases:
+      - django fast enough
+      - do not rewrite in go
+      - python web app 60 requests per second
+      - pin database query count in tests
+      - n plus one regression tests
+    tech: [django, postgres, redis, new-relic]
+  - id: d2
+    kind: decision
+    topics: [capacity-cost, deployment-rollout]
+    title: Choose ad server hosting by load test, picking Azure AppService over Heroku for predictable latency
+    chosen:
+      text: "After siege load tests of staging deployments on Heroku and on Azure AppService, up to 100 ad requests per second, the ad server launched on AppService. The AppService setup tested was 4 Premium P1 instances, about $300 a month; the post does not say what size went to production."
+      locator: "Section: Load testing our ad server"
+    rejected:
+      - option: Heroku with 4 or 10 Standard-2x dynos
+        reason: "At 100 requests per second 4 dynos (about $200 a month) dropped nothing but p99 reached 550-600 ms; 10 dynos (about $500) gave p99 near 350 ms but scaled less than linearly, and 100 concurrent requests would also require pricier Redis and Postgres plans for connections."
+        locator: "Section: Load testing our ad server"
+    forcing_condition: null
+    rationale:
+      text: "For this application the team counted performance and predictability as critical, and judged AppService to give predictable performance at good value. In the staging tests AppService scaled very linearly with instance count and had a p50 of about 75 ms and p99 of about 200 ms."
+      locator: "Section: Load testing our ad server"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "A few months after rollout the team hit issues with AppService, which the post does not describe. It switched to autoscaled VM scale sets, which in the same siege tests scaled better and cut about 15 ms off the p50, for reasons the team does not know."
+      locator: "Section: Performance today"
+    applies_from: null
+    curator_notes:
+      - "The Heroku and AppService figures come from staging load tests, not production. The team also runs VM scale sets for Read the Docs."
+    aliases:
+      - load test before choosing hosting
+      - heroku versus azure
+      - p99 latency hosting comparison
+      - autoscaled vm scale sets
+    tech: [heroku, azure-appservice, azure-vm-scale-sets, gunicorn]
