@@ -133,12 +133,14 @@ const legacy = (method, params) => {
   };
 };
 
-const client = new Client({ name: "precedent-bench", version: "0.0.0" });
+// Pinned, because the SDK's client otherwise opens with the 2025 handshake.
+const client = new Client({ name: "precedent-bench", version: "0.0.0" }, { versionNegotiation: { mode: { pin: "2026-07-28" } } });
 await client.connect(
   new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), {
     fetch: (url, init) => fetch(url, { ...init, headers: { ...Object.fromEntries(new Headers(init?.headers)), "cf-connecting-ip": address() } }),
   }),
 );
+if (client.getProtocolEra() !== "modern") throw new Error("the benchmark's 2026-07-28 client did not negotiate the modern era");
 
 const QUERIES = [
   "background jobs in postgres instead of redis",

@@ -20,6 +20,19 @@ async function rpc(response: Response): Promise<{ result?: any; error?: { code: 
   return JSON.parse(text);
 }
 
+/** A request as a 2026-07-28 client sends it: no handshake, the protocol version and client in every message. */
+function modern(method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}, env: Env = {}): Promise<Response> {
+  const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "test", version: "0" }, "io.modelcontextprotocol/clientCapabilities": {} };
+  return post({ jsonrpc: "2.0", id: 5, method, params: { ...params, _meta: meta } }, { "mcp-protocol-version": "2026-07-28", "mcp-method": method, ...headers }, env);
+}
+
+/** The whole body, or a failure if it has not ended within a second: a held-open stream must not pass for an answer. */
+async function ended(response: Response): Promise<string> {
+  const outcome = await Promise.race([response.text(), new Promise<null>((resolve) => setTimeout(() => resolve(null), 1000))]);
+  if (outcome === null) throw new Error("the response body was still open after one second");
+  return outcome;
+}
+
 const call = (name: string, args: unknown, headers?: Record<string, string>, env?: Env) =>
   post({ jsonrpc: "2.0", id: 7, method: "tools/call", params: { name, arguments: args } }, headers, env);
 
@@ -78,6 +91,45 @@ describe("the MCP endpoint", () => {
       const { result, error } = await rpc(await call(name, {}));
       expect(error ?? (result.isError && result)).toBeTruthy();
     }
+  });
+
+  it("serves a 2026-07-28 client without a handshake", async () => {
+    const discovered = await rpc(await modern("server/discover"));
+    expect(discovered.result.supportedVersions).toContain("2026-07-28");
+    expect(discovered.result.instructions).toContain(`${ORIGIN}/corpus/corpus.json`);
+
+    const called = await modern("tools/call", { name: "precedent_search", arguments: { query: "tarpit rate limiting", traffic: 1 } }, { "mcp-name": "precedent_search" });
+    expect(called.headers.get("content-type")).toContain("application/json");
+    const { result } = await rpc(called);
+    expect(result.content[0].text).toContain("cite: healthchecks-2025-tarpit-outage#");
+  });
+
+  it("advertises no list-change notifications, to either era", async () => {
+    const legacy = await rpc(await post({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2025-06-18", capabilities: {}, clientInfo: { name: "test", version: "0" } } }));
+    expect(legacy.result.capabilities).toEqual({ tools: { listChanged: false } });
+    const current = await rpc(await modern("server/discover"));
+    expect(current.result.capabilities).toEqual({ tools: { listChanged: false } });
+  });
+
+  it("never holds a subscription stream open: whatever is asked for, nothing is honoured and the response ends", async () => {
+    const filters = [
+      { toolsListChanged: true },
+      { promptsListChanged: true },
+      { resourcesListChanged: true },
+      { resourceSubscriptions: ["precedent://anything"] },
+      { toolsListChanged: true, promptsListChanged: true, resourcesListChanged: true, resourceSubscriptions: ["precedent://anything"] },
+    ];
+    for (const notifications of filters) {
+      const response = await modern("subscriptions/listen", { notifications });
+      const body = await ended(response);
+      const messages = body.split("\n").filter((line) => line.startsWith("data: ")).map((line) => JSON.parse(line.slice(6)));
+      expect(messages[0]).toMatchObject({ method: "notifications/subscriptions/acknowledged", params: { notifications: {} } });
+      expect(messages.at(-1)).toMatchObject({ id: 5, result: { resultType: "complete" } });
+      expect(body).not.toContain("keepalive");
+    }
+    // A 2025-era client has no such method at all.
+    const legacy = await post({ jsonrpc: "2.0", id: 9, method: "subscriptions/listen", params: { notifications: { toolsListChanged: true } } });
+    expect((await rpc({ text: async () => ended(legacy), headers: legacy.headers } as Response)).error).toMatchObject({ code: -32601 });
   });
 
   it("refuses GET and DELETE: there are no sessions and no streams to open", async () => {
@@ -157,6 +209,51 @@ describe("limits", () => {
     const response = await call("precedent_facets", {}, {}, broken);
     expect(response.status).toBe(200);
     expect(logged.map((line) => JSON.parse(line))).toContainEqual({ event: "error", name: "rate_limiter" });
+  });
+});
+
+describe("cross-origin access", () => {
+  const origin = { origin: "http://localhost:5173" };
+  const policy = (response: Response) => ({
+    allowOrigin: response.headers.get("access-control-allow-origin"),
+    expose: response.headers.get("access-control-expose-headers"),
+  });
+
+  it("gives refusals the same CORS headers as answers, so a browser client can read why it was refused", async () => {
+    const answered = await call("precedent_facets", {}, origin);
+    expect(answered.status).toBe(200);
+    expect(policy(answered)).toEqual({ allowOrigin: "*", expose: "Retry-After" });
+
+    const refusals: [number, Promise<Response>][] = [
+      [400, post("{not json", origin)],
+      [400, post([{ jsonrpc: "2.0", id: 1, method: "tools/list" }], origin)],
+      [413, post(JSON.stringify({ jsonrpc: "2.0", id: 1, method: "ping", params: { pad: "x".repeat(20_000) } }), origin)],
+      [429, call("precedent_facets", {}, origin, { RATE_LIMITER: { limit: async () => ({ success: false }) } })],
+      [404, worker.fetch(new Request(`${ORIGIN}/elsewhere`, { headers: origin }), {}, ctx)],
+    ];
+    for (const [status, pending] of refusals) {
+      const response = await pending;
+      expect(response.status).toBe(status);
+      expect(policy(response)).toEqual(policy(answered));
+    }
+  });
+
+  it("lets a browser read Retry-After off a rate-limit refusal", async () => {
+    const refused = await call("precedent_facets", {}, origin, { RATE_LIMITER: { limit: async () => ({ success: false }) } });
+    expect(refused.headers.get("retry-after")).toBe("60");
+    expect(refused.headers.get("access-control-expose-headers")!.toLowerCase().split(/,\s*/)).toContain("retry-after");
+  });
+
+  it("answers a preflight with the same policy", async () => {
+    const preflight = await worker.fetch(
+      new Request(`${ORIGIN}/mcp`, { method: "OPTIONS", headers: { ...origin, "access-control-request-method": "POST", "access-control-request-headers": "content-type, mcp-protocol-version, mcp-method" } }),
+      {},
+      ctx,
+    );
+    expect(preflight.status).toBeLessThan(300);
+    expect(policy(preflight)).toEqual({ allowOrigin: "*", expose: "Retry-After" });
+    expect(preflight.headers.get("access-control-allow-methods")).toBe("POST, OPTIONS");
+    expect(preflight.headers.get("access-control-allow-headers")!.toLowerCase()).toContain("mcp-method");
   });
 });
 

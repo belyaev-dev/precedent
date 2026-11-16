@@ -1,6 +1,6 @@
 // Compiles parsed cards into the index the Worker serves. Runs at build time (scripts/build-corpus.mjs)
 // and in tests; never at request time.
-import { prefixKey, tokenize } from "./text.ts";
+import { isPendingReview, prefixKey, tokenize } from "./text.ts";
 import { AXES, type Axis, type Card, type CardRecord, type CorpusIndex, type Doc, type Facets, type Fact, type Term, type Tombstone } from "./types.ts";
 
 // How much a term counts by where it appears. Titles, aliases and tags are written to be searched;
@@ -121,7 +121,7 @@ export function buildIndex(parsed: (Card | Tombstone)[], version: string, vocabu
     assertServable(item);
     cards.set(item.id, item);
     systems += 1;
-    if (/^pending\b/i.test(item.review.reviewed_by)) reviewPending += 1;
+    if (isPendingReview(item.review.reviewed_by)) reviewPending += 1;
     for (const workload of item.workloads) bump(counts.workloads, workload);
     if (item.footprint) bump(counts.footprints, item.footprint.shape);
     for (const axis of AXES) bump(tiers[axis], item.scale[axis] ? String(item.scale[axis].tier) : "unknown");

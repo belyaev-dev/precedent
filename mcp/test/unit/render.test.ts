@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import { NOT_STATED, renderFacets, renderGet, renderSearch } from "../../src/render.ts";
 import { search, type SearchParams } from "../../src/search.ts";
 import { KINDS } from "../../src/types.ts";
-import { corpus, FIXTURE_VERSION, fixtureIndex } from "../helpers.ts";
+import { buildIndex } from "../../src/build-index.ts";
+import type { Card } from "../../src/types.ts";
+import { corpus, FIXTURE_VERSION, fixtureCards, fixtureIndex } from "../helpers.ts";
 
 const index = fixtureIndex();
 const SMALL = { traffic: 0, data: 0, team: 0 };
@@ -107,6 +109,23 @@ describe("search response", () => {
   it("shows each card's review status", () => {
     expect(show({ query: "sqlite file" })).toContain("review reviewed by Ada Example on 2026-11-16");
     expect(show({ query: "transactional enqueue" })).toContain("review PENDING human review (machine-checked only)");
+  });
+
+  it("keeps the machine-checked-only warning however the pending marker is spaced or cased", () => {
+    for (const marker of [" PENDING human review", "pending", "\tPending review", "\u200bPENDING human review"]) {
+      const cards = fixtureCards();
+      // tiny is the one fixture a person has reviewed; mark it as pending in an untidy way.
+      (cards.find((card) => card.id === "tiny-2024-notes") as Card).review.reviewed_by = marker;
+      const untidy = buildIndex(cards, FIXTURE_VERSION, index.vocabulary);
+      expect(untidy.facets.review_pending).toBe(index.facets.review_pending + 1);
+      expect(renderFacets(untidy)).toContain(`${index.facets.review_pending + 1} of 6 cards are PENDING human review (machine-checked only).`);
+      const hit = renderSearch(untidy, search(untidy, { query: "sqlite file" }), { kindGiven: false });
+      expect(hit).toContain("review PENDING human review (machine-checked only)");
+      expect(hit).not.toContain("reviewed by");
+      const full = renderGet(untidy, ["tiny-2024-notes#d1"]).text;
+      expect(full).toContain("review: PENDING human review (machine-checked only); extracted by hand-written fixture");
+      expect(full).not.toContain("reviewed by");
+    }
   });
 
   it("flags disputed cards and reversed decisions", () => {
