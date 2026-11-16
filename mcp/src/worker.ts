@@ -4,6 +4,7 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { limiterKey } from "./address.ts";
+import { bounded } from "./bounded.ts";
 import generated from "./generated/corpus.json" with { type: "json" };
 import { instructions, SERVER_NAME, SERVER_VERSION, toolset, type Log } from "./tools.ts";
 import type { CorpusIndex } from "./types.ts";
@@ -26,8 +27,27 @@ const ROUTE = "/mcp";
 const MAX_BODY_BYTES = 16 * 1024;
 const WORKER_HEADER = { "x-precedent-worker": "1" };
 
+// One CORS policy for everything this endpoint sends: the handler's answers and this file's refusals
+// alike. Any origin may read a response (the data is public and there are no credentials); which
+// origins may call at all is the handler's Origin check. Retry-After is exposed so that a browser
+// client can read it off a rate-limit refusal.
+const CORS = {
+  origin: "*",
+  methods: "POST, OPTIONS",
+  headers: "Content-Type, Accept, MCP-Protocol-Version, Mcp-Method, Mcp-Name",
+  exposeHeaders: "Retry-After",
+  maxAge: 86400,
+};
+const CORS_HEADERS = {
+  "access-control-allow-origin": CORS.origin,
+  "access-control-allow-methods": CORS.methods,
+  "access-control-allow-headers": CORS.headers,
+  "access-control-expose-headers": CORS.exposeHeaders,
+  "access-control-max-age": String(CORS.maxAge),
+};
+
 // Methods worth counting by name. Anything else a caller sends is logged as "other", never verbatim.
-const KNOWN_METHODS = new Set(["initialize", "server/discover", "ping", "tools/list", "tools/call", "notifications/initialized", "notifications/cancelled"]);
+const KNOWN_METHODS = new Set(["initialize", "server/discover", "ping", "tools/list", "tools/call", "subscriptions/listen", "notifications/initialized", "notifications/cancelled"]);
 
 const log: Log = (entry) => console.log(JSON.stringify(entry));
 
@@ -41,12 +61,20 @@ function mcp(env: Env): ReturnType<typeof createMcpHandler> {
   return (handler ??= createMcpHandler(
     (context) => {
       const origin = context.requestInfo ? new URL(context.requestInfo.url).origin : "";
-      const server = new McpServer({ name: SERVER_NAME, version: `${SERVER_VERSION}+${index.version}` }, { instructions: instructions(index, origin) });
+      const server = new McpServer(
+        { name: SERVER_NAME, version: `${SERVER_VERSION}+${index.version}` },
+        // The tool list changes only with a deploy, so list-change notifications are declared off. McpServer
+        // would otherwise advertise them, and a subscriptions/listen request would then be honoured with a
+        // stream held open and kept alive for as long as the client liked. With nothing to honour, the
+        // handler acknowledges an empty subscription and completes at once.
+        { instructions: instructions(index, origin), capabilities: { tools: { listChanged: false } } },
+      );
       register(server, log);
       return server;
     },
     {
       route: ROUTE,
+      corsOptions: CORS,
       allowedHostnames: list(env.ALLOWED_HOSTNAMES),
       allowedOriginHostnames: list(env.ALLOWED_ORIGIN_HOSTNAMES),
       maxRequestBodySize: MAX_BODY_BYTES,
@@ -58,7 +86,7 @@ function mcp(env: Env): ReturnType<typeof createMcpHandler> {
 function refuse(status: number, code: number, reason: string, message: string, origin: string, headers: Record<string, string> = {}): Response {
   log({ event: "refused", reason });
   const pointer = `The whole corpus is a static file with no request limits: ${origin}/corpus/corpus.json`;
-  return Response.json({ jsonrpc: "2.0", error: { code, message: `${message} ${pointer}` }, id: null }, { status, headers: { ...WORKER_HEADER, ...headers } });
+  return Response.json({ jsonrpc: "2.0", error: { code, message: `${message} ${pointer}` }, id: null }, { status, headers: { ...CORS_HEADERS, ...WORKER_HEADER, ...headers } });
 }
 
 /** The body as text, or null once it exceeds the limit. Stops reading at the limit instead of buffering the rest. */
@@ -81,7 +109,13 @@ async function readBounded(request: Request, limit: number): Promise<string | nu
   }
 }
 
-function withWorkerHeader(response: Response): Response {
+/**
+ * The handler's answer as a finished response. Whatever the protocol layer returns is read to its end
+ * within fixed limits first, so no request can leave a stream open; one that tries is cancelled and refused.
+ */
+async function finished(answer: Promise<Response>, origin: string): Promise<Response> {
+  const response = await bounded(await answer);
+  if (!response) return refuse(500, -32603, "stream_held", "This server answers each request once and does not hold streams open.", origin);
   const headers = new Headers(response.headers);
   headers.set("x-precedent-worker", "1");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -93,10 +127,10 @@ export default {
     if (url.pathname !== ROUTE) {
       return new Response(`Not found. The MCP endpoint is POST ${ROUTE}. The corpus as a static file is /corpus/corpus.json.\n`, {
         status: 404,
-        headers: { "content-type": "text/plain; charset=utf-8", ...WORKER_HEADER },
+        headers: { "content-type": "text/plain; charset=utf-8", ...CORS_HEADERS, ...WORKER_HEADER },
       });
     }
-    if (request.method !== "POST") return withWorkerHeader(await mcp(env)(request, env, ctx));
+    if (request.method !== "POST") return finished(mcp(env)(request, env, ctx), url.origin);
 
     // The client address (its /64 for IPv6) is used as the counting key and for nothing else. It is not logged.
     // If the limiter itself fails, serve the request: a broken counter should not take a read-only endpoint down.
@@ -124,6 +158,6 @@ export default {
 
     // The body has been read, so hand the handler a request that carries everything but the body.
     const bodiless = new Request(request.url, { method: "POST", headers: request.headers, signal: request.signal });
-    return withWorkerHeader(await mcp(env).fetch(bodiless, { parsedBody: message }));
+    return finished(mcp(env).fetch(bodiless, { parsedBody: message }), url.origin);
   },
 };

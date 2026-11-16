@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MAX_QUERY_TERMS, nearMiss, queryTerms, stem, tokenize } from "../../src/text.ts";
+import { isPendingReview, MAX_QUERY_TERMS, nearMiss, queryTerms, stem, tokenize } from "../../src/text.ts";
 
 describe("stem", () => {
   it.each([
@@ -83,6 +83,15 @@ describe("queryTerms", () => {
     }
     expect(queryTerms('"" :: -- || && !! ((( ))) *** ???').terms).toEqual([]);
   });
+});
+
+describe("isPendingReview", () => {
+  it.each(["PENDING human review", " PENDING human review", "\tpending", "Pending review", "pending", "  \u00a0Pending — awaiting a reader", "\u200bPENDING human review", "*PENDING*", "(pending)", "PENDINGREVIEW", "pending-review"])(
+    "treats %j as not yet reviewed",
+    (value) => expect(isPendingReview(value)).toBe(true),
+  );
+
+  it.each(["Ada Example", "hand-written example", "A. Pending-Smith", "reviewed, nothing pending", "Dr Pendergast"])("treats %j as a reviewer's name", (value) => expect(isPendingReview(value)).toBe(false));
 });
 
 describe("nearMiss", () => {
