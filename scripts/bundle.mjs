@@ -18,6 +18,8 @@ for (const [name, text] of sources) hash.update(name).update("\0").update(text).
 const version = hash.digest("hex").slice(0, 12);
 
 const LETTER = { traffic: "T", data: "D", team: "O" };
+// A literal pipe would split the table row.
+const cell = (text) => text.replaceAll("|", "\\|");
 const tier = (axis) => (axis ? String(axis.tier) : "?");
 const rows = [];
 const withdrawn = [];
@@ -37,7 +39,7 @@ for (const [name, text] of sources) {
     const flags = [card.status === "disputed" ? "DISPUTED" : "", record.reversed_by ? `reversed by ${record.reversed_by}` : ""].filter(Boolean).join("; ");
     rows.push({
       workload: card.workloads[0],
-      line: `| \`${card.id}#${record.id}\` | ${record.kind} | ${scale} | ${shape} | ${floor || "-"} | ${record.topics.join(", ")} | ${card.org}, ${card.as_of ?? "undated"}: ${record.title}${flags ? ` (${flags})` : ""} |`,
+      line: `| \`${card.id}#${record.id}\` | ${record.kind} | ${scale} | ${shape} | ${floor || "-"} | ${record.topics.join(", ")} | ${cell(`${card.org}, ${card.as_of ?? "undated"}: ${record.title}`)}${flags ? ` (${flags})` : ""} |`,
     });
   }
 }
