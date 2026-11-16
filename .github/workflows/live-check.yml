@@ -1,12 +1,13 @@
-# Checks the deployed endpoint from outside: the static corpus downloads whole and the MCP endpoint answers.
-# Runs daily, on demand, and when this file changes. It makes four requests, so it costs almost none of the quota.
+# Checks the deployed endpoint from outside: the static corpus downloads whole and holds cards, and the MCP
+# endpoint returns real records for a fetch and a search. Runs daily, on demand, and when this file or its
+# script changes. It makes five requests, so it costs almost none of the quota.
 name: live-check
 on:
   schedule:
     - cron: "17 6 * * *"
   workflow_dispatch:
   pull_request:
-    paths: [".github/workflows/live-check.yml"]
+    paths: [".github/workflows/live-check.yml", "scripts/live-check.py"]
 permissions:
   contents: read
 jobs:
@@ -14,16 +15,5 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - name: Static corpus downloads whole and parses
-        run: |
-          curl -fsS --max-time 60 -o corpus.json https://mcp.precedents.dev/corpus/corpus.json
-          python3 -c "import json; d = json.load(open('corpus.json')); print('bytes', len(open('corpus.json','rb').read()), 'top-level', type(d).__name__, list(d)[:6] if isinstance(d, dict) else len(d))"
-      - name: MCP endpoint answers a handshake and a search
-        run: |
-          post() { curl -fsS --max-time 30 -X POST https://mcp.precedents.dev/mcp -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' "$@"; }
-          post -d '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"live-check","version":"0"}}}' | grep -q '"serverInfo"'
-          post -H 'mcp-protocol-version: 2025-06-18' -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"precedent_get","arguments":{"ids":["gitlab-2017-database-outage","slack-2023-real-time-messaging","github-2023-code-search","square-2019-books-ledger"]}}}' > get.txt
-          grep -q 'gitlab-2017-database-outage' get.txt
-          echo "get response bytes: $(wc -c < get.txt)"
-      - name: A plain GET to the MCP path is refused
-        run: test "$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 https://mcp.precedents.dev/mcp)" = 405
+      - uses: actions/checkout@v4
+      - run: python3 scripts/live-check.py https://mcp.precedents.dev
