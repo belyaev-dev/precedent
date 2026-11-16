@@ -1,0 +1,208 @@
+schema: 1
+id: stackoverflow-2016-architecture
+title: Stack Overflow serves all Q&A sites from one multi-tenant ASP.NET app on two SQL Server clusters
+org: Stack Overflow
+system: Stack Overflow and the Stack Exchange network
+architecture:
+  text: "One multi-tenant ASP.NET application on IIS serves every Q&A site behind HAProxy load balancers. SQL Server is the single source of truth, with Redis, Elasticsearch and a tag engine fed from it, and everything is duplicated in a second data center."
+  locator: "Near: The primary Q&A Application itself is multi-tenant"
+components:
+  - name: HAProxy load balancers
+    role: "Terminate TLS and route to backends mostly by host header; also apply rate limiting and record per-request performance metrics from headers sent by the web tier. They hold plenty of memory to cache TLS sessions."
+    tech: haproxy
+    locator: "Section: Load Balancers (HAProxy)"
+  - name: Web tier
+    role: "Nine primary IIS servers run Stack Overflow, Careers and the Stack Exchange sites, with two more for dev and the meta sites. The Q&A application is multi-tenant, so one application pool on one server could run the whole Q&A network."
+    tech: iis
+    locator: "Section: Web Tier (IIS 8.5, ASP.Net MVC 5.2.3, and .Net 4.6.1)"
+  - name: Service tier
+    role: "Runs internal services behind the web tier, mainly the tag engine (Stack Server) and the Providence API, plus Elasticsearch indexing jobs. Three servers are enough because loading changed posts every 2 minutes should not be repeated by all nine web servers."
+    locator: "Section: Service Tier (IIS, ASP.Net MVC 5.2.3, .Net 4.6.1, and HTTP.SYS)"
+  - name: Redis
+    role: "Two main servers (master and replica) back an L2 cache and a publish and subscribe channel used to clear L1 caches and to feed websockets. Two further servers hold a machine learning instance for recommendations."
+    tech: redis
+    locator: "Section: Cache & Pub/Sub (Redis)"
+  - name: Websockets
+    role: "A thin raw-socket layer on the web tier pushes notifications, vote counts and new answers or comments to browsers."
+    locator: "Near: we use websockets to push real-time updates"
+  - name: Elasticsearch
+    role: "Serves site search, related questions and suggestions when asking. Each data center has a 3-node cluster with one index per site, kept current by the service tier."
+    tech: elasticsearch
+    locator: "Section: Search (Elasticsearch)"
+  - name: SQL Server
+    role: "The single source of truth for all data in Elasticsearch and Redis. Two clusters, each with one master and replicas in New York and Colorado, hold the Stack Overflow, Sites, PRIZM and Mobile databases in one and everything else, including every other Q&A site, in the other."
+    tech: sql-server
+    locator: "Section: Databases (SQL Server)"
+  - name: Second data center
+    role: "Colorado holds a redundant copy of all servers and services for disaster recovery, linked to New York by a 10Gbps MPLS used for data replication."
+    locator: "Section: Ground Rules"
+as_of: "2016-02"
+evidence: production
+workloads: [crud-app, multi-tenant-data, read-cache]
+footprint:
+  shape: partitioned
+  locator: "Near: run 2 SQL Server clusters with AlwaysOn Availability"
+scale:
+  # The daily count is for one day in February 2016. Averaged over a day it is well inside tier 3, but the
+  # post gives no peak, so the tier is an estimate. Stored data is not given: the SSD sizes are capacity.
+  traffic:
+    tier: 3
+    basis: estimated
+    note: "209 million HTTP requests to the load balancer in one day averages about 2,400 a second, which is inside tier 3 (1,000 to under 10,000). The post gives no peak rate, so a peak above 10,000 is not ruled out."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: HTTP requests to the load balancer in one day
+      value: 209420973
+      unit: requests per day
+      qualifier: a single day, February 9th 2016; whole network
+      locator: "Near: 209,420,973 (+61,336,090) HTTP requests to our load balancer"
+    - axis: other
+      name: page loads in one day
+      value: 66294789
+      unit: page loads per day
+      qualifier: a single day, February 9th 2016
+      locator: "Near: 66,294,789 (+30,199,477) of those were page loads"
+    - axis: other
+      name: SQL queries from HTTP requests in one day
+      value: 504816843
+      unit: queries per day
+      qualifier: a single day, February 9th 2016; from HTTP requests alone
+      locator: "Near: 504,816,843 (+170,244,740) SQL Queries (from HTTP requests alone)"
+    - axis: other
+      name: concurrent websocket connections
+      value: 500000
+      unit: connections
+      qualifier: about; during peak
+      locator: "Near: about 500,000 concurrent websocket connections open"
+    - axis: other
+      name: Redis operations
+      value: 160
+      unit: billion operations per month
+      qualifier: about; every instance below 2% CPU
+      locator: "Near: about 160 billion ops a month"
+source:
+  url: https://nickcraver.com/blog/2016/02/17/stack-overflow-the-architecture-2016-edition/
+  archive_url: null
+  title: "Stack Overflow: The Architecture - 2016 Edition"
+  publisher: Nick Craver's blog
+  author: Nick Craver
+  published: "2016-02-17"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [service-boundaries, capacity-cost]
+    title: Serve every Q&A site from one multi-tenant application and keep web servers overprovisioned
+    chosen:
+      text: "A single application serves all the Q&A sites, while Careers, API v2 and the Mobile API are separate applications. Nine primary web servers are run although fewer are needed."
+      locator: "Section: Web Tier (IIS 8.5, ASP.Net MVC 5.2.3, and .Net 4.6.1)"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The author says the large overprovisioning in the web tier is for rolling builds, headroom and redundancy, and promises a fuller explanation in a later post."
+      locator: "Section: Web Tier (IIS 8.5, ASP.Net MVC 5.2.3, and .Net 4.6.1)"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "After a hardware upgrade in early 2015 and a lot of tuning, only 1 web server is needed to run Stack Overflow. The team has run on one server by accident a few times and it held. The author says it works but does not call it a good idea."
+      locator: "Near: we're down to needing only 1 web server"
+    applies_from: null
+    curator_notes:
+      - "The post does not say why Q&A is multi-tenant in one application, only that it is. The figures are for 2016, not the earlier design."
+    aliases:
+      - one app for many tenants
+      - run whole network on one server
+      - overprovisioned web tier
+      - headroom for rolling deploys
+      - monolith serving many sites
+    tech: [asp.net, iis, haproxy]
+  - id: d2
+    kind: decision
+    topics: [datastore-choice, capacity-cost]
+    title: Use Elasticsearch for search instead of SQL Server full-text search, because SQL CPUs are expensive
+    chosen:
+      text: "Search runs on Elasticsearch: a 3-node cluster per data center, one index per site, with the service tier indexing items changed since a stored last-position marker, using SQL Server's ROWVERSION as the sequence."
+      locator: "Section: Search (Elasticsearch)"
+    rejected:
+      - option: SQL full-text search
+        reason: "CPU on the SQL Server machines costs much more than Elasticsearch, which also offers more features."
+        locator: "Section: Search (Elasticsearch)"
+      - option: Solr
+        reason: "It could not search across many indexes at once, which the network needs, at the time of the decision."
+        locator: "Section: Search (Elasticsearch)"
+    forcing_condition: null
+    rationale:
+      text: "Scalability and a better allocation of money."
+      locator: "Section: Search (Elasticsearch)"
+    worked_before: null
+    cost_paid:
+      text: "The cluster stays on Elasticsearch 1.4 because moving to 2.x means a major change to types and reindexing everything, and the author lacks time for the migration plan."
+      locator: "Section: Search (Elasticsearch)"
+    outcome: null
+    applies_from: null
+    aliases:
+      - elasticsearch instead of sql full text
+      - search cost on database cpu
+      - search across many indexes
+      - index from rowversion
+    tech: [elasticsearch, sql-server, solr]
+  - id: d3
+    kind: decision
+    topics: [caching]
+    title: Cache in two layers, a web-server HTTP cache and Redis, and clear the first layer through Redis pub/sub
+    chosen:
+      text: "L1 is the HTTP cache on each web server and L2 is Redis. On a miss in both, a server loads from the source and fills both. When one web server removes a value, a Redis pub/sub message clears the other servers' L1 copies."
+      locator: "Section: Cache & Pub/Sub (Redis)"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "A value one server missed may be found in Redis by the next server, saving a database query or API call."
+      locator: "Section: Cache & Pub/Sub (Redis)"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "Redis handles about 160 billion operations a month with every instance below 2% CPU, usually much lower."
+      locator: "Section: Cache & Pub/Sub (Redis)"
+    applies_from: null
+    aliases:
+      - two level cache
+      - local cache plus redis
+      - invalidate local caches with pub sub
+      - l1 l2 cache
+    tech: [redis, protobuf]
+  - id: d4
+    kind: decision
+    topics: [capacity-cost, load-shedding-backpressure]
+    title: Push updates to browsers over websockets, which are more efficient than polling, at the cost of load balancer port exhaustion
+    chosen:
+      text: "Real-time updates such as notifications, vote counts and new answers reach browsers over websockets served by raw sockets on the web tier, using the team's NetGain library."
+      locator: "Near: we use websockets to push real-time updates"
+    rejected:
+      - option: Polling
+        reason: "At this scale polling is far less efficient: websockets deliver more data on fewer resources and reach the user sooner."
+        locator: "Near: Why websockets? They're tremendously more efficient than polling"
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid:
+      text: "Ephemeral port and file handle exhaustion on the load balancer are among the issues websockets bring."
+      locator: "Near: ephemeral port and file handle exhaustion"
+    outcome:
+      text: "About 500,000 concurrent websocket connections are open at peak, and some browsers have kept theirs open for over 18 months."
+      locator: "Near: about 500,000 concurrent websocket connections open"
+    applies_from: null
+    aliases:
+      - websockets instead of polling
+      - half a million concurrent connections
+      - ephemeral port exhaustion
+      - realtime updates to browsers
+    tech: [websockets, netgain, haproxy]

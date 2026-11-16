@@ -1,0 +1,122 @@
+schema: 1
+id: sourcehut-2020-simple-infrastructure
+title: SourceHut runs a code forge on 10 hand-provisioned servers and about 30 VMs, with no Kubernetes or Docker and independent miniservices
+org: SourceHut
+system: SourceHut code forge infrastructure
+architecture:
+  text: "SourceHut runs on 10 dedicated servers and about 30 virtual machines, all provisioned by hand, with no Kubernetes, Docker or CloudFormation. Its application is split into independent miniservices that can fail separately, and many pages make only one or two database round-trips."
+  locator: "Near: SourceHut has 10 dedicated servers and about 30"
+components:
+  - name: Dedicated servers and virtual machines
+    role: "The platform's hosts, provisioned by hand. The team prefers Alpine Linux for them, and the average production server has only 20 to 30 packages installed, so no moving parts go unexplained."
+    tech: alpine-linux
+    locator: "Near: Alpine Linux because it's lightweight and simple"
+  - name: Miniservices
+    role: "A distributed set of small services, designed so that any one can fail without a total outage."
+    locator: "Near: any of our services to fail independently"
+  - name: Database access
+    role: "Many pages are designed to make only one or two round-trips to the database, which lets those queries be carefully tuned with joins and purpose-built indexes."
+    locator: "Near: designed to make only one or two round-trips"
+  - name: Email-based collaboration
+    role: "Because users collaborate by email, the whole service could be offline without stopping their work, and servers catch up on redelivery when they return."
+    locator: "Near: our entire service could be offline without affecting"
+  - name: Monitoring
+    role: "Monitoring alerts the team to problems before they are serious, and the raw data is exposed through a public Prometheus instance."
+    tech: prometheus
+    locator: "Near: monitoring which alerts us to problems before"
+as_of: "2020-04"
+evidence: production
+workloads: [crud-app]
+footprint: null
+scale:
+  # The post gives no request rate and no data size. "Two employees and an intern" is the company's
+  # whole headcount, which supports no team tier under the card rules.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: dedicated servers
+      value: 10
+      unit: servers
+      qualifier: all provisioned by hand
+      locator: "Near: SourceHut has 10 dedicated servers and about 30"
+    - axis: other
+      name: virtual machines
+      value: 30
+      unit: virtual machines
+      qualifier: about; all provisioned by hand
+      locator: "Near: SourceHut has 10 dedicated servers and about 30"
+    - axis: other
+      name: employees
+      value: 2
+      unit: employees
+      qualifier: plus an intern; the whole company, in the first quarter of 2020
+      locator: "Near: with two employees and an intern"
+source:
+  url: https://sourcehut.org/blog/2020-04-20-prioritizing-simplitity/
+  archive_url: null
+  title: Prioritizing simplicity improves performance and reliability
+  publisher: SourceHut blog
+  author: Drew DeVault
+  published: "2020-04-20"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [deployment-rollout, capacity-cost]
+    title: Provision plain servers by hand on minimal Alpine Linux and avoid Kubernetes, Docker and CloudFormation
+    chosen:
+      text: "Production uses hand-provisioned dedicated servers and virtual machines, preferably on Alpine Linux, with few packages each, and no Kubernetes, Docker, CloudFormation or monorepos."
+      locator: "Near: no Kubernetes here, no Docker, no CloudFormation"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Part of a culture of simplicity: servers that do not break unexpectedly and no moving parts the team does not understand, which the author ties to reliability."
+      locator: "Near: no moving parts that we don't understand"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The author reports two outages so far in 2020, both planned and announced a week in advance."
+      locator: "Near: SourceHut has had two outages in 2020"
+    applies_from: null
+    curator_notes:
+      - "The post contrasts its outage count with GitHub's and GitLab's and does not state its own traffic, so the reliability claim is the author's, over the first months of 2020 only."
+    aliases:
+      - no kubernetes
+      - hand provisioned servers
+      - minimal linux servers
+      - simple infrastructure small team
+      - alpine linux production
+    tech: [alpine-linux]
+  - id: d2
+    kind: decision
+    topics: [service-boundaries, dependency-failure]
+    title: Split the forge into independent miniservices and use email so an outage does not stop users working
+    chosen:
+      text: "The application is a distributed set of miniservices, so any one can fail without a total outage, and collaboration runs over email, so users can keep working when the service is offline and servers catch up afterwards."
+      locator: "Near: any of our services to fail independently"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Reliability on several levels: simple servers, monitoring that alerts early, and a design that works even during an outage."
+      locator: "Near: We achieve reliability on several levels"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "Of the two outages in 2020 so far, only one affected more than one subsystem."
+      locator: "Near: one of which affected more than one subsystem"
+    applies_from: null
+    aliases:
+      - services fail independently
+      - miniservices
+      - email as fault tolerance
+      - outage without total loss of service
+    tech: [email]

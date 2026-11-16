@@ -1,0 +1,163 @@
+schema: 1
+id: fathom-2020-viral-customer-backlog
+title: One viral Fathom customer backlogs the shared pageview queue, and a slow database disk and unindexed tables prolong it
+org: Fathom Analytics
+system: Pageview queue and MySQL database
+architecture:
+  text: "Fathom runs on serverless infrastructure (Lambda, SQS and similar, through Laravel Vapor), with pageviews processed from a background queue."
+  locator: "Near: we run on serverless infrastructure (Lambda, SQS, etc.)"
+as_of: "2020-08"
+evidence: incident
+workloads: [analytics-pipeline, job-queue]
+footprint:
+  shape: single-database
+  locator: "Near: thousands of others running on the main database"
+scale:
+  # Team: the post says the company has two founders, one of whom handles code and servers,
+  # but it never states how many engineers build and operate the system, so no tier is set.
+  # The incident's volume is not the system's peak traffic, so traffic and data stay empty.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: founders
+      value: 2
+      unit: founders
+      qualifier: one handles code and servers, the other content and design
+      locator: "Near: Fathom Analytics has two founders"
+    - axis: other
+      name: queue backlog at the start of the incident
+      value: 1500000
+      unit: jobs
+      qualifier: first thing in the morning; normally the backlog never exceeds 20 jobs
+      locator: "Near: a 1.5 million job backlog in our queue"
+    - axis: other
+      name: database CPU after the queue workers were doubled twice
+      value: 97
+      unit: percent
+      qualifier: the highest the author had seen
+      locator: "Near: our database CPU was running at 97%"
+source:
+  url: https://usefathom.com/blog/viral
+  archive_url: null
+  title: What happened when a customer got over 10m pageviews in a few hours?
+  publisher: Fathom Analytics blog
+  author: Jack Ellis
+  published: "2020-08-19"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [tenant-isolation, load-shedding-backpressure, capacity-cost]
+    title: A viral customer's pageviews backlog the shared queue for all sites while the database runs out of disk IOPS
+    trigger:
+      text: "A customer launched a new project that went unexpectedly viral, adding tens of millions of views in a very short time on top of its main site."
+      locator: "Near: tens of millions of views in a very"
+    mechanism:
+      text: "Every site's pageviews share one queue and one database, so the viral site's flood blocked everyone's stats. The database turned out to be maxing out its disk IOPS, which on RDS follow volume size; the author's example is 300 IOPS for 100GB."
+      locator: "Section: We’re running out of time"
+    why_defences_failed:
+      text: "Concurrent queue workers are capped on purpose so the database is not overloaded, so a flood becomes a backlog. Doubling the workers twice began clearing it, but database CPU reached 97%, so they were scaled back and the backlog grew again."
+      locator: "Section: We need more soldiers"
+    impact:
+      text: "People could not see their current visitors and their dashboard stats were delayed. The day started with a backlog of 1.5 million jobs."
+      locator: "Section: What happened when a customer got over 10m pageviews in a few hours?"
+    fix:
+      text: "Raised database storage to 1000GB to get ten times the IOPS, which took about an hour."
+      locator: "Section: Throwing money at the problem"
+    curator_notes:
+      - "The author also lists plans, made after the incident, to move MySQL to DynamoDB, stats to managed Elasticsearch and live visitors to Pusher. These are plans, not reported results, so they are not in the fix field."
+    aliases:
+      - one tenant floods shared queue
+      - viral customer backlog
+      - noisy neighbour analytics
+      - rds iops limit
+      - raising queue workers made database cpu spike
+    tech: [mysql, sqs, laravel-vapor, lambda]
+  - id: f2
+    kind: failure
+    topics: [schema-data-migration, observability]
+    title: Unindexed backlog tables and a text-typed site ID kept the database slow after the disk was fixed
+    trigger:
+      text: "After the queue had drained and the author thought the day was over, the backlog returned at 70,000 jobs and database CPU hit 99%."
+      locator: "Section: A false sense of security"
+    mechanism:
+      text: "Recently added backlog tables had no indexes, because they were normally processed within minutes and had never backed up, so with millions of rows common selects took 2 seconds. Separately, the site ID column in the pageviews table was still a varchar after a switch to numeric IDs, making the current-visitors query for Fathom's own site take 2 seconds."
+      locator: "Section: Looking in the wrong places"
+    why_defences_failed:
+      text: "Even after the database was given more CPU and memory, CPU was back at 50% within 30 minutes because the queries themselves were slow. The author had not thought about indexes on tables that had never backed up, and had forgotten to change the column type."
+      locator: "Section: Looking in the wrong places"
+    impact:
+      text: "Many hanging queries selecting current visitors ran 2 seconds for smaller sites and 40 seconds for bigger ones."
+      locator: "Section: Double everything"
+    fix:
+      text: "Added indexes, taking common backlog queries from 2 seconds to 60 milliseconds, and changed the site ID column to an unsigned big integer, taking the current-visitors query from 2 seconds to 58 ms. CPU then sat around 6%."
+      locator: "Section: Looking in the wrong places"
+    aliases:
+      - missing index on backlog table
+      - varchar column instead of integer
+      - doubling the database did not help
+      - slow current visitors query
+      - queue backlog tables without indexes
+    tech: [mysql]
+  - id: d1
+    kind: decision
+    topics: [load-shedding-backpressure, async-processing]
+    title: Cap concurrent queue workers on purpose to protect the database, accepting a bigger backlog
+    chosen:
+      text: "The configuration limits the number of concurrent background queue workers."
+      locator: "Section: We need more soldiers"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The team prefers letting jobs pile up in the queue to overloading the database."
+      locator: "Section: We need more soldiers"
+    worked_before: null
+    cost_paid:
+      text: "During a flood the cap lets the backlog grow, so the author's first reaction was to raise it."
+      locator: "Section: We need more soldiers"
+    outcome:
+      text: "In the viral incident, doubling the workers twice began to clear the backlog until database CPU reached 97%, the highest the author had seen, so he scaled the workers back down and the backlog started growing again."
+      locator: "Section: We need more soldiers"
+    applies_from: null
+    aliases:
+      - limit queue worker concurrency
+      - protect database from queue workers
+      - backlog instead of database overload
+      - worker cap
+    tech: [sqs, mysql, laravel-vapor]
+  - id: d2
+    kind: decision
+    topics: [tenant-isolation, load-shedding-backpressure]
+    title: Limit pageviews processed per site per minute so one viral site cannot block the rest, then drop it
+    chosen:
+      text: "Allow only 500 page views per minute per site to be processed from the queue and postpone the excess."
+      locator: "Section: Time to bring in my cofounder"
+    rejected:
+      - option: A separate high-spec database for the viral customer's traffic, leaving the thousands of other sites on the main database
+        reason: "A solid idea and a great band-aid, but the data would then have to be processed in the new database too, which seemed too complex."
+        locator: "Section: Time to bring in my cofounder"
+    forcing_condition:
+      text: "All customers were drowned out by one site: with thousands of sites on Fathom, this single viral site blocked everyone."
+      locator: "Section: Time to bring in my cofounder"
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "Some blocked jobs began to be processed, but after about 30 minutes the backlog was seen to compound, because the viral site was still sending far more than 500 page views a minute. The limit was removed."
+      locator: "Section: Time to bring in my cofounder"
+    applies_from: null
+    aliases:
+      - per tenant rate limit on queue
+      - one tenant blocks all others
+      - fair queue per site
+      - dedicated database for one customer
+    tech: [sqs, mysql]
