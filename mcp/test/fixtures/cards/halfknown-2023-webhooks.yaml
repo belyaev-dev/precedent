@@ -1,0 +1,87 @@
+# SYNTHETIC TEST FIXTURE. Every fact is invented. Never served as evidence.
+# One estimated tier, two unknown. Its first record carries a reviewer's floor; its second was later reversed.
+schema: 1
+id: halfknown-2023-webhooks
+title: Halfknown delivers webhooks from a single retrying worker
+org: Halfknown (fictional)
+system: Webhook delivery
+architecture:
+  text: One worker reads pending deliveries from a table and posts them to customer endpoints, retrying with backoff.
+  locator: "Section: Design"
+as_of: "2023"
+evidence: production
+workloads: [webhook-delivery]
+footprint:
+  shape: single-database
+  locator: "Section: Design"
+scale:
+  traffic:
+    tier: 0
+    basis: estimated
+    note: The post gives 90,000 deliveries a day, which is about one a second on average; even a tenfold peak stays under ten.
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: webhook deliveries
+      value: 90000
+      unit: per day
+      qualifier: average
+      locator: "Section: Numbers"
+source:
+  url: https://example.com/halfknown-webhooks
+  archive_url: null
+  title: Our webhook pipeline
+  publisher: Example Engineering (fictional)
+  published: "2023-11-20"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: hand-written fixture
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [delivery-idempotency]
+    title: Send an idempotency key with every webhook so receivers can drop duplicates
+    chosen:
+      text: Each delivery carries a key derived from the event and the endpoint, and is retried with the same key.
+      locator: "Section: Retries"
+    rejected: []
+    forcing_condition:
+      text: Customers reported acting twice on the same event after a retry followed a timed-out but successful delivery.
+      locator: "Section: Retries"
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from:
+      traffic_tier: 0
+      basis: curator_judgment
+      rationale: Duplicate delivery after a timeout does not depend on volume, so the floor is the lowest tier.
+    aliases:
+      - duplicate webhooks
+      - at least once delivery
+      - idempotency
+    tech: [postgres]
+  - id: d2
+    kind: decision
+    topics: [async-processing]
+    title: Poll the deliveries table every second from one worker
+    chosen:
+      text: A single worker polls the deliveries table once a second.
+      locator: "Section: Design"
+    rejected: []
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    reversed_by: bigco-2020-streams#d1
+    aliases:
+      - polling worker
+    tech: [postgres]

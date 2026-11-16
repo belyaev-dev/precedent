@@ -1,0 +1,7 @@
+# SYNTHETIC TEST FIXTURE of a withdrawn card.
+schema: 1
+id: gone-2021-cache
+status: retracted
+status_note: Withdrawn because the source was found to describe a test bench, not production.
+retracted_at: "2026-10-01"
+withdrawn_records: [d1, d2]

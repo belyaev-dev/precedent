@@ -1,0 +1,60 @@
+# SYNTHETIC TEST FIXTURE. Every fact is invented. Never served as evidence.
+# No tier on any axis and no footprint: unknown scale for every caller.
+schema: 1
+id: murky-2022-queue
+title: Murky moves background jobs into its main database
+org: Murky (fictional)
+system: Background job queue
+architecture:
+  text: Workers poll a jobs table in the main relational database and claim rows with row locks.
+  locator: "Near: workers poll a jobs table"
+as_of: null
+evidence: production
+workloads: [job-queue]
+footprint: null
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://example.com/murky-queue
+  archive_url: null
+  title: Jobs in the database
+  publisher: Example Engineering (fictional)
+  published: "2022-06"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: hand-written fixture
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, datastore-choice]
+    title: Queue jobs in the main database so that enqueueing commits with the work that caused it
+    chosen:
+      text: Jobs are rows in the main database, inserted in the same transaction as the change that needs them.
+      locator: "Near: same transaction"
+    rejected:
+      - option: A separate message broker
+        reason: null
+        locator: "Near: we looked at a broker"
+    forcing_condition:
+      text: Jobs enqueued to the separate broker were lost whenever the request's transaction rolled back after the enqueue.
+      locator: "Near: lost whenever"
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - The post gives no figures at all, so nothing here says how far this approach scales.
+    aliases:
+      - transactional enqueue
+      - jobs lost on rollback
+      - database backed queue
+    tech: [postgres]
