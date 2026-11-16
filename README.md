@@ -64,6 +64,18 @@ The skill ships with a copy of the cards so it works with no server.
 
 **Static corpus.** The full corpus is also published as a single file, so nobody needs to scrape the endpoint and the skill has a fallback when the endpoint's daily quota runs out.
 
+## MCP server
+
+[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. **It is not deployed yet**: it runs locally under `wrangler dev`, and deployment waits on the choice of account and address.
+
+- Three read-only tools: `precedent_search` (keywords plus kind, workload, topic, tech, footprint and the caller's scale envelope), `precedent_get` (up to eight records or systems per call) and `precedent_facets` (what the corpus covers).
+- Search groups hits as at the caller's scale, at a different scale, of unknown scale, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.
+- Every result carries a ready citation, each fact's locator, "not stated in the source" for gaps, the card's review status and the corpus version. Withdrawn ids resolve to a notice.
+- The build also writes the corpus as static files, `/corpus/corpus.json` and one file per card, which are served without invoking the Worker.
+- No model runs at request time and nothing is stored. The index is compiled into the Worker from `cards/` at build time.
+
+Tool parameters, example responses, limits, what is logged, measurements and the deployment steps are in [`mcp/README.md`](mcp/README.md).
+
 ## Sources
 
 Primary sources only: accounts by the organisation that runs the system of how it is built, why it changed, or how it failed, plus peer-reviewed systems papers and independent test reports. A plain "here is our architecture" post is as welcome as a migration story or a post-mortem; the corpus is meant to hold examples of real production systems, not only their turning points. Link lists such as `danluu/post-mortems` and `awesome-scalability` are used to find sources, not as sources. Interview-preparation material, secondary summaries, and vendor reference architectures are out of scope for now.
@@ -101,6 +113,12 @@ npm run validate   # checks every card in cards/ and schema/examples/
 # Writing a card: fetch the source text to a file outside the repo, then check the card against it.
 node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
 node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
+```
+
+The server has its own package and tests:
+
+```bash
+cd mcp && npm ci && npm test
 ```
 
 `check-source` confirms that every number in a card, and every `Section:` or `Near:` locator, appears in the source text. Page and timestamp locators are not checked. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
