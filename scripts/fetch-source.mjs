@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Fetches a source page as plain text for card writing, unless robots.txt says not to.
 // Usage: node scripts/fetch-source.mjs <url> <out.txt>   (out must be outside the repository)
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -15,7 +15,20 @@ if (!url || !out) {
   process.exit(2);
 }
 const root = resolve(fileURLToPath(import.meta.url), "../..");
-if (resolve(out).startsWith(root + sep)) {
+// Resolve links on the nearest existing ancestor, so a symlinked output directory cannot point back into the repo.
+function realTarget(path) {
+  let dir = resolve(path);
+  const rest = [];
+  for (;;) {
+    try {
+      return [realpathSync(dir), ...rest].join(sep);
+    } catch {
+      rest.unshift(dir.slice(dir.lastIndexOf(sep) + 1));
+      dir = dirname(dir);
+    }
+  }
+}
+if (`${realTarget(out)}${sep}`.startsWith(realpathSync(root) + sep)) {
   console.error("refusing to write source text inside the repository");
   process.exit(2);
 }
@@ -38,11 +51,19 @@ export function blockedBy(robots, path) {
     } else if (current && (field === "allow" || field === "disallow")) {
       if (value) current.rules.push({ allow: field === "allow", pattern: value });
       lastWasAgent = false;
-    } else {
-      lastWasAgent = false;
     }
+    // Any other field (Sitemap, Crawl-delay) is ignored and does not end a run of user-agent lines.
   }
+  const decode = (s) => {
+    try {
+      return decodeURIComponent(s);
+    } catch {
+      return s;
+    }
+  };
+  path = decode(path);
   const matches = (pattern) => {
+    pattern = decode(pattern);
     const source = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*").replace(/\\\$$/, "$");
     return new RegExp(`^${source}`).test(path);
   };
