@@ -32,6 +32,8 @@
     "production": {
       "name": "precedent-mcp",
       "workers_dev": false,
+      // Version preview URLs are a second address outside the zone, so they are off as well.
+      "preview_urls": false,
       "routes": [{ "pattern": "mcp.precedents.dev", "custom_domain": true }],
       // Browser pages on this hostname and on localhost may call the endpoint. To allow pages elsewhere too,
       // add "ALLOWED_ORIGIN_HOSTNAMES": "app.example.org" (comma-separated; added to the defaults).

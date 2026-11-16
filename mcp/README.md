@@ -2,7 +2,7 @@
 
 A read-only, unauthenticated [MCP](https://modelcontextprotocol.io) endpoint for the Precedent corpus, built for Cloudflare Workers on the Free plan. An agent can search the corpus and fetch records without loading the whole index into its context.
 
-> **Not deployed.** Everything here runs locally under `wrangler dev`. See [Deploying](#deploying) for the one command and the decisions it waits on.
+> **Live at `https://mcp.precedents.dev/mcp`.** See [Deploying](#deploying) for how production is set up and what it does not protect against.
 
 ## How it works
 
@@ -231,7 +231,7 @@ npm ci && cd mcp && npm ci && npx wrangler deploy --env production
 
 How production is set up:
 
-- **Address.** A custom domain only. `workers_dev` is off in the production environment, so there is no second address that skips the edge rule below.
+- **Address.** A custom domain only. `workers_dev` and `preview_urls` are off in the production environment, so there is no second address that skips the edge rule below.
 - **Origins.** `ALLOWED_HOSTNAMES` is the custom hostname. Browser pages may call the endpoint from that origin and from local development origins; `ALLOWED_ORIGIN_HOSTNAMES` would add more. Clients that send no `Origin` (every non-browser client) are unaffected.
 - **Edge rate limiting.** One rate limiting rule on the zone blocks a client address that sends more than 40 requests in 10 seconds to `/mcp`, for 10 seconds, before the request reaches the Worker. In a test of 150 requests over about five seconds, 101 were refused at the edge.
 - **Worker rate limiting.** The binding's 120 requests a minute per client, explained under [Limits](#limits).
