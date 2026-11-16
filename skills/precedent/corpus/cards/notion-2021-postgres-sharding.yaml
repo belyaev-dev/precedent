@@ -1,0 +1,175 @@
+schema: 1
+id: notion-2021-postgres-sharding
+title: Notion shards its Postgres monolith by workspace ID into 480 logical shards
+org: Notion
+system: Postgres block store
+architecture:
+  text: Notion moved its block data, and every table related to it, from one Postgres monolith to 480 logical shards, each a Postgres schema, spread evenly over 32 physical databases; the application routes each query by workspace ID.
+  locator: "Section: Decision 3: Capacity planning"
+as_of: "2021"
+evidence: production
+workloads: [multi-tenant-data]
+footprint:
+  shape: partitioned
+  locator: "Near: a fleet of 32 physical databases, each containing"
+scale:
+  # The post gives no request rate, no total stored data and no engineer count for this system.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: IOPS needed to meet existing demand
+      value: 60000
+      unit: IOPS
+      qualifier: at least; disk throughput, not request rate
+      locator: "Section: Decision 3: Capacity planning"
+    - axis: other
+      name: upper bound per table
+      value: 500
+      unit: GB
+      qualifier: design limit chosen for the shard layout, not a stored size
+      locator: "Section: Decision 3: Capacity planning"
+    - axis: other
+      name: upper bound per physical database
+      value: 10
+      unit: TB
+      qualifier: design limit chosen for the shard layout, not a stored size
+      locator: "Section: Decision 3: Capacity planning"
+    - axis: other
+      name: logical shards
+      value: 480
+      unit: shards
+      qualifier: chosen layout
+      locator: "Section: Decision 3: Capacity planning"
+    - axis: other
+      name: physical databases
+      value: 32
+      unit: databases
+      qualifier: chosen layout
+      locator: "Section: Decision 3: Capacity planning"
+source:
+  url: https://www.notion.com/blog/sharding-postgres-at-notion
+  archive_url: null
+  title: "Herding elephants: Lessons learned from sharding Postgres at Notion"
+  publisher: Notion
+  author: Garrett Fidalgo
+  published: "2021-10-06"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-partitioning, datastore-choice]
+    title: Shard the Postgres monolith in application code once autovacuum stalled, rather than scale up or adopt a packaged sharding product
+    chosen:
+      text: Notion wrote its own partitioning scheme and routes queries from application logic across several Postgres databases, instead of adopting a packaged sharding product.
+      locator: "Section: Application-level sharding"
+    rejected:
+      - option: Keep scaling vertically with bigger RDS instances
+        reason: Bigger instances do not fix it, whatever the budget; query speed and maintenance such as the stalled autovacuum start to suffer long before a table hits the hardware's size limit.
+        locator: "Section: Designing a sharding scheme"
+      - option: Packaged sharding or clustering such as Citus or Vitess
+        reason: Simpler, with cross-shard tooling built in, but their clustering logic is opaque.
+        locator: "Section: Application-level sharding"
+      - option: Switch to another database system such as DynamoDB
+        reason: Judged too risky for Notion's workload.
+        locator: "Near: switching to another database system such as DynamoDB"
+      - option: Run Postgres on bare-metal NVMe-heavy instances for more disk throughput
+        reason: Rejected because of the maintenance cost of backups and replication.
+        locator: "Near: running Postgres on bare-metal NVMe heavy instances"
+    forcing_condition:
+      text: By mid-2020 growth was set to exceed what the monolith could do. On-call engineers were often paged by database CPU spikes, even catalog-only schema changes had become risky, and VACUUM stalled consistently, raising the threat of transaction ID wraparound, at which Postgres stops accepting writes.
+      locator: "Section: Deciding when to shard"
+    rationale:
+      text: The team wanted to control how its data is distributed across databases itself.
+      locator: "Section: Application-level sharding"
+    worked_before:
+      text: The one Postgres database had handled five years of growth, spanning four orders of magnitude.
+      locator: "Section: Deciding when to shard"
+    cost_paid:
+      text: The team waited until the monolith was heavily strained, so every migration step had to avoid adding load. Shard earlier heads the list of things the authors say they would reconsider.
+      locator: "Section: Difficult lessons learned"
+    outcome:
+      text: In the authors' own assessment the project succeeded, and they say users found the product noticeably faster after a few minutes of downtime.
+      locator: "Section: Difficult lessons learned"
+    applies_from: null
+    curator_notes:
+      - The post gives no request rate or stored-data total for the monolith, so the point where VACUUM stalled cannot be tied to a size.
+    aliases:
+      - outgrew single postgres
+      - autovacuum cannot keep up
+      - transaction id wraparound risk
+      - when to shard postgres
+      - postgres monolith too big
+      - horizontal partitioning
+    tech: [postgres, rds]
+  - id: d2
+    kind: decision
+    topics: [datastore-partitioning, consistency-transactions]
+    title: Partition by workspace ID and shard every table reachable from the block table
+    chosen:
+      text: Block data and its related rows are partitioned by workspace ID. Each workspace receives a UUID when created, and the UUID space is split into even buckets.
+      locator: "Section: Decision 2: Partition block data by workspace ID"
+    rejected: []
+    forcing_condition:
+      text: A block and the rows tied to it had to stay consistent, and transactions do not span datastores; with comments on another database, deleting a block could succeed while updating its comments failed. So every table reachable from block by foreign key was sharded with it.
+      locator: "Section: Decision 1: Shard all data transitively related to block"
+    rationale:
+      text: Notion is team-based, every sharded row is a block or belongs to one, and each block sits in exactly one workspace; since users mostly query within one workspace, this key avoids most cross-shard joins.
+      locator: "Section: Decision 2: Partition block data by workspace ID"
+    worked_before: null
+    cost_paid:
+      text: Sharded rows carry both the old primary key and the space ID as partition key, so the application must pass space IDs around. The authors say one combined key would have avoided this.
+      locator: "Section: Difficult lessons learned"
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - The first footnote warns that sharding by a key that later stops matching the product model, such as user then team, causes lasting pain. The workspace key suits a team-based product; check that your tenant boundary matches how your own data is queried.
+    aliases:
+      - shard by tenant id
+      - partition key choice
+      - avoid cross shard joins
+      - co-locate related rows
+      - workspace id as shard key
+    tech: [postgres]
+  - id: d3
+    kind: decision
+    topics: [schema-data-migration, datastore-partitioning]
+    title: Move to shards with an audit log and catch-up script, not logical replication, because the strained monolith left little room for extra load
+    chosen:
+      text: Writes to the tables being moved were recorded in an audit log table, and a catch-up process replayed them onto the shards, changing rows where needed. A reverse audit log and script were prepared and tested in case of a fall back to the monolith.
+      locator: "Section: Double-writing with an audit log"
+    rejected:
+      - option: Write directly to both databases
+        reason: A failure of either write can quickly put the two databases out of step, too unreliable for datastores on the critical path.
+        locator: "Section: Double-writing with an audit log"
+      - option: Postgres logical replication
+        reason: Could not keep pace with the block table's writes while taking its initial snapshot, and allows little transformation of rows on the way to the target.
+        locator: "Section: Double-writing with an audit log"
+    forcing_condition:
+      text: The monolith was already under heavy strain, so the migration could add very little load, which ruled out logical replication. The workspace ID column was empty there and filling it would have added load, so it was set on each row as it was written to the shards.
+      locator: "Section: Difficult lessons learned"
+    rationale: null
+    worked_before: null
+    cost_paid:
+      text: Catch-up throughput was the main bottleneck at switch-over, so the service stayed down until the script had applied the remaining writes. The authors think another week of tuning, to under 30 seconds of catch-up, might have allowed a switch with no downtime.
+      locator: "Section: Difficult lessons learned"
+    outcome:
+      text: The production backfill of existing data, run on one instance using all 96 of its CPUs, took around three days.
+      locator: "Section: Backfilling old data"
+    applies_from: null
+    aliases:
+      - double write migration
+      - zero downtime data migration
+      - backfill and verify
+      - dark reads
+      - audit log catch up
+      - migrating a monolith to shards
+    tech: [postgres]

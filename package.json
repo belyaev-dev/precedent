@@ -5,7 +5,9 @@
   "description": "Evidence cards on how real systems were built and how they failed, for agents doing system design.",
   "license": "MIT",
   "scripts": {
-    "validate": "node scripts/validate.mjs"
+    "validate": "node scripts/validate.mjs",
+    "bundle": "node scripts/bundle.mjs",
+    "check": "node scripts/validate.mjs && node scripts/bundle.mjs --check"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

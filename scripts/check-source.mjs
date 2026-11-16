@@ -15,6 +15,7 @@ const source = normalise(readFileSync(sourcePath, "utf8"));
 const sourceDigits = source.replace(/(\d),(?=\d{3})/g, "$1");
 
 // The ways a source might write a value: 4000, 4,000, 4k, 4 thousand, 2.5 million, 2.5m, 3bn.
+const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
 function numberForms(value) {
   const forms = [String(value)];
   for (const [divisor, suffixes] of [[1e3, ["k", " thousand"]], [1e6, ["m", " million", "mm"]], [1e9, ["b", "bn", " billion"]], [1e12, ["t", " trillion"]]]) {
@@ -23,7 +24,9 @@ function numberForms(value) {
   }
   return forms;
 }
-const hasNumber = (value) => numberForms(value).some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?![\\d])`).test(sourceDigits));
+const hasNumber = (value, written = String(value)) =>
+  (WORDS[value] && new RegExp(`\\b${WORDS[value]}\\b`).test(source)) ||
+  [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?![\\d])`).test(sourceDigits));
 
 const problems = [];
 function checkLocator(locator, where) {
@@ -35,7 +38,7 @@ function checkLocator(locator, where) {
 }
 function checkText(text, where) {
   for (const token of text.replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(\.\d+)?/g) ?? []) {
-    if (!hasNumber(Number(token))) problems.push(`${where}: number ${token} not found in source`);
+    if (!hasNumber(Number(token), token)) problems.push(`${where}: number ${token} not found in source`);
   }
 }
 function checkFact(fact, where) {
@@ -45,13 +48,15 @@ function checkFact(fact, where) {
 }
 
 checkFact(card.architecture, "architecture");
+if (card.footprint) checkLocator(card.footprint.locator, "footprint");
 for (const metric of card.scale?.metrics ?? []) {
   if (!hasNumber(metric.value)) problems.push(`metric "${metric.name}": value ${metric.value} not found in source`);
   checkLocator(metric.locator, `metric "${metric.name}"`);
 }
 for (const record of card.records ?? []) {
   const at = (field) => `${record.id}.${field}`;
-  for (const field of ["chosen", "forcing_condition", "worked_before", "cost_paid", "outcome", "trigger", "mechanism", "why_defences_failed", "impact", "fix"]) {
+  checkText(record.title, at("title"));
+  for (const field of ["chosen", "forcing_condition", "rationale", "worked_before", "cost_paid", "outcome", "trigger", "mechanism", "why_defences_failed", "impact", "fix"]) {
     checkFact(record[field], at(field));
   }
   for (const [i, rejected] of (record.rejected ?? []).entries()) {
