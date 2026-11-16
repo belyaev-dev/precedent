@@ -1,0 +1,8 @@
+# SYNTHETIC EXAMPLE of a withdrawn card. Nothing of the summary remains;
+# old citations to acme-2021-search#d1 resolve to this notice.
+schema: 1
+id: acme-2021-search
+status: retracted
+status_note: Withdrawn at the publisher's request.
+retracted_at: "2026-11-16"
+withdrawn_records: [d1, f1]
