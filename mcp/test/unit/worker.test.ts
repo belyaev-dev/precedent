@@ -257,13 +257,69 @@ describe("cross-origin access", () => {
   });
 });
 
+describe("which browser origins may call", () => {
+  /** Whether a tool call sent to the endpoint at host, from a page at origin, is served. */
+  async function allowed(host: string, origin: string | null, env: Env): Promise<boolean> {
+    const headers: Record<string, string> = { ...HEADERS, host };
+    if (origin) headers.origin = origin;
+    const response = await worker.fetch(
+      new Request(`https://${host}/mcp`, { method: "POST", headers, body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "precedent_facets", arguments: {} } }) }),
+      env,
+      ctx,
+    );
+    if (response.status === 200) return true;
+    expect(response.status).toBe(403);
+    return false;
+  }
+
+  it("lets a page on the custom domain call the endpoint on that domain", async () => {
+    const env = { ALLOWED_HOSTNAMES: "mcp.example.org" };
+    expect(await allowed("mcp.example.org", "https://mcp.example.org", env)).toBe(true);
+    // Local development origins and callers with no Origin still work.
+    expect(await allowed("mcp.example.org", "http://localhost:5173", env)).toBe(true);
+    expect(await allowed("mcp.example.org", "http://127.0.0.1:3000", env)).toBe(true);
+    expect(await allowed("mcp.example.org", null, env)).toBe(true);
+    // Any other site does not.
+    expect(await allowed("mcp.example.org", "https://evil.example", env)).toBe(false);
+    expect(await allowed("mcp.example.org", "https://mcp.example.org.evil.example", env)).toBe(false);
+  });
+
+  it("adds configured origins to the defaults instead of replacing them", async () => {
+    const env = { ALLOWED_HOSTNAMES: "mcp.example.org", ALLOWED_ORIGIN_HOSTNAMES: "app.example.com, Tools.Example.net" };
+    for (const origin of ["https://app.example.com", "https://tools.example.net", "https://mcp.example.org", "http://localhost:5173"]) {
+      expect(await allowed("mcp.example.org", origin, env), origin).toBe(true);
+    }
+    expect(await allowed("mcp.example.org", "https://other.example.com", env)).toBe(false);
+  });
+
+  it("treats every hostname the endpoint answers on as its own", async () => {
+    const env = { ALLOWED_HOSTNAMES: "mcp.example.org,precedent.example.org" };
+    expect(await allowed("mcp.example.org", "https://precedent.example.org", env)).toBe(true);
+    expect(await allowed("precedent.example.org", "https://mcp.example.org", env)).toBe(true);
+  });
+
+  it("allows the endpoint's own origin with no configuration at all, on a custom domain and on workers.dev", async () => {
+    for (const host of ["mcp.example.org", "precedent-mcp.someone.workers.dev"]) {
+      expect(await allowed(host, `https://${host}`, {})).toBe(true);
+      expect(await allowed(host, "http://localhost:5173", {})).toBe(true);
+      expect(await allowed(host, "https://evil.example", {})).toBe(false);
+    }
+  });
+
+  it("still refuses a request for a host the endpoint is not configured to answer on", async () => {
+    const env = { ALLOWED_HOSTNAMES: "mcp.example.org" };
+    expect(await allowed("elsewhere.example.org", "https://elsewhere.example.org", env)).toBe(false);
+    expect(await allowed("elsewhere.example.org", null, env)).toBe(false);
+  });
+});
+
 describe("what is logged", () => {
   it("records counts for a tool call, and neither the query nor the client address", async () => {
     await call("precedent_search", { query: "tarpit haproxy secretword", traffic: 0 }, { "cf-connecting-ip": "203.0.113.77", "user-agent": "nosy-agent/1.0" }, { RATE_LIMITER: { limit: async () => ({ success: true }) } });
     await call("precedent_get", { ids: ["healthchecks-2025-tarpit-outage#d1", "no-such-card"] }, { "cf-connecting-ip": "203.0.113.77" });
     expect(logged.map((line) => JSON.parse(line))).toEqual([
       { event: "search", matched: expect.any(Number), shown: expect.any(Number), at_scale: expect.any(Number), envelope: 1 },
-      { event: "get", asked: 2, found: 1, withdrawn: 0, missing: 1 },
+      { event: "get", asked: 2, found: 1, withdrawn: 0, missing: 1, left_out: 0 },
     ]);
     expect(logged.join("\n")).not.toMatch(/tarpit|haproxy|secretword|203\.0\.113|nosy|healthchecks|no-such/);
 

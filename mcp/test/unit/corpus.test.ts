@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { MAX_TOOL_RESULT_BYTES, wireBytes } from "../../src/limits.ts";
 import { renderGet } from "../../src/render.ts";
 import { corpus, repoRoot } from "../helpers.ts";
 
@@ -26,6 +27,19 @@ describe("the compiled corpus", () => {
       expect(renderGet(corpus, [id])).toMatchObject({ found: 1, missing: 0, withdrawn: 0 });
     }
     expect(corpus.docs).toHaveLength(corpus.facets.systems + corpus.facets.decisions + corpus.facets.failures);
+  });
+
+  it("fits its eight largest records or systems in one response, with nothing left out", () => {
+    const ids = corpus.docs.map((doc) => (doc.record ? `${doc.card}#${doc.record}` : doc.card));
+    const largest = ids
+      .map((id) => ({ id, size: wireBytes(renderGet(corpus, [id]).text) }))
+      .sort((a, b) => b.size - a.size)
+      .slice(0, 8)
+      .map((entry) => entry.id);
+    const result = renderGet(corpus, largest);
+    expect(result).toMatchObject({ found: 8, leftOut: 0, missing: 0 });
+    // Real answers are nowhere near the limit; it exists for cards far larger than any yet written.
+    expect(wireBytes(result.text)).toBeLessThan(MAX_TOOL_RESULT_BYTES / 2);
   });
 
   it("offers exactly the schema's workloads and topics", () => {

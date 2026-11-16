@@ -4,7 +4,8 @@
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { limiterKey } from "./address.ts";
-import { bounded } from "./bounded.ts";
+import { hostnames, originHostnames } from "./origins.ts";
+import { bounded, OVERRUN } from "./bounded.ts";
 import generated from "./generated/corpus.json" with { type: "json" };
 import { instructions, SERVER_NAME, SERVER_VERSION, toolset, type Log } from "./tools.ts";
 import type { CorpusIndex } from "./types.ts";
@@ -51,14 +52,15 @@ const KNOWN_METHODS = new Set(["initialize", "server/discover", "ping", "tools/l
 
 const log: Log = (entry) => console.log(JSON.stringify(entry));
 
-const list = (value: string | undefined): string[] | undefined => {
-  const items = (value ?? "").split(",").map((item) => item.trim()).filter(Boolean);
-  return items.length ? items : undefined;
-};
-
-let handler: ReturnType<typeof createMcpHandler> | undefined;
-function mcp(env: Env): ReturnType<typeof createMcpHandler> {
-  return (handler ??= createMcpHandler(
+// One handler per hostname the endpoint is reached on, because the Origin allowlist depends on it. In
+// production that is one or two entries; the cap only stops a local run from growing the map without end.
+const handlers = new Map<string, ReturnType<typeof createMcpHandler>>();
+function mcp(env: Env, hostname: string): ReturnType<typeof createMcpHandler> {
+  const key = `${hostname}|${env.ALLOWED_HOSTNAMES ?? ""}|${env.ALLOWED_ORIGIN_HOSTNAMES ?? ""}`;
+  let handler = handlers.get(key);
+  if (handler) return handler;
+  const hosts = hostnames(env.ALLOWED_HOSTNAMES);
+  handler = createMcpHandler(
     (context) => {
       const origin = context.requestInfo ? new URL(context.requestInfo.url).origin : "";
       const server = new McpServer(
@@ -69,18 +71,21 @@ function mcp(env: Env): ReturnType<typeof createMcpHandler> {
         // handler acknowledges an empty subscription and completes at once.
         { instructions: instructions(index, origin), capabilities: { tools: { listChanged: false } } },
       );
-      register(server, log);
+      register(server, log, origin);
       return server;
     },
     {
       route: ROUTE,
       corsOptions: CORS,
-      allowedHostnames: list(env.ALLOWED_HOSTNAMES),
-      allowedOriginHostnames: list(env.ALLOWED_ORIGIN_HOSTNAMES),
+      allowedHostnames: hosts.length ? hosts : undefined,
+      allowedOriginHostnames: originHostnames(hostname, env),
       maxRequestBodySize: MAX_BODY_BYTES,
       onerror: (error) => log({ event: "error", name: error.name }),
     },
-  ));
+  );
+  if (handlers.size >= 16) handlers.clear();
+  handlers.set(key, handler);
+  return handler;
 }
 
 function refuse(status: number, code: number, reason: string, message: string, origin: string, headers: Record<string, string> = {}): Response {
@@ -111,11 +116,12 @@ async function readBounded(request: Request, limit: number): Promise<string | nu
 
 /**
  * The handler's answer as a finished response. Whatever the protocol layer returns is read to its end
- * within fixed limits first, so no request can leave a stream open; one that tries is cancelled and refused.
+ * within fixed limits first, so no request can leave a stream open. An answer that overruns is refused
+ * for what it did: taking too long and being too large are different faults and are reported as such.
  */
 async function finished(answer: Promise<Response>, origin: string): Promise<Response> {
   const response = await bounded(await answer);
-  if (!response) return refuse(500, -32603, "stream_held", "This server answers each request once and does not hold streams open.", origin);
+  if (typeof response === "string") return refuse(500, -32603, OVERRUN[response].reason, OVERRUN[response].message, origin);
   const headers = new Headers(response.headers);
   headers.set("x-precedent-worker", "1");
   return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
@@ -130,7 +136,7 @@ export default {
         headers: { "content-type": "text/plain; charset=utf-8", ...CORS_HEADERS, ...WORKER_HEADER },
       });
     }
-    if (request.method !== "POST") return finished(mcp(env)(request, env, ctx), url.origin);
+    if (request.method !== "POST") return finished(mcp(env, url.hostname)(request, env, ctx), url.origin);
 
     // The client address (its /64 for IPv6) is used as the counting key and for nothing else. It is not logged.
     // If the limiter itself fails, serve the request: a broken counter should not take a read-only endpoint down.
@@ -158,6 +164,6 @@ export default {
 
     // The body has been read, so hand the handler a request that carries everything but the body.
     const bodiless = new Request(request.url, { method: "POST", headers: request.headers, signal: request.signal });
-    return finished(mcp(env).fetch(bodiless, { parsedBody: message }), url.origin);
+    return finished(mcp(env, url.hostname).fetch(bodiless, { parsedBody: message }), url.origin);
   },
 };
