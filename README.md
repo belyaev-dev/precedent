@@ -4,7 +4,23 @@ Evidence for system design. Precedent is a corpus of short, reviewed records of 
 
 It exists because agents design from memory, and memory produces the interview answer: a gateway, five services, a message bus, a cache and a search cluster, whatever the product's actual load. Precedent aims to give the agent something better to reason from: what a team at a comparable scale chose, what forced the choice, what the simpler setup handled before that, and what broke.
 
-> **Status: pilot.** The corpus holds a first batch of draft cards. Each was extracted by a model from its source and checked against that source by a second model and by script, but **none has yet been reviewed by a person**; every card says so in its `review` block. Treat them as leads to verify, not as settled fact. The skill is a first version, and no server is deployed. See [Roadmap](#roadmap).
+> **Status: pilot.** The corpus holds a first batch of draft cards. Each was extracted by a model from its source and checked against that source by a second model and by script, but **none has yet been reviewed by a person**; every card says so in its `review` block. Treat them as leads to verify, not as settled fact. The skill and an MCP server are first versions. See [Roadmap](#roadmap).
+
+## Using it
+
+Install the skill, which carries its own copy of the corpus and needs nothing else:
+
+```bash
+npx skills add belyaev-dev/precedent
+```
+
+Optionally connect the hosted MCP server, so an agent can search the corpus by scale and topic instead of reading the whole index:
+
+```bash
+claude mcp add --transport http precedent https://mcp.precedents.dev/mcp
+```
+
+The server is public and read-only, and needs no account. The same corpus is available as static files at `https://mcp.precedents.dev/corpus/corpus.json`.
 
 ## How it is organised
 
@@ -47,7 +63,7 @@ Many post-mortems give no scale figures. Their records are still searchable; the
 
 A card never contains the source's prose, diagrams, code, or quotes beyond a few words, and it is kept short enough that it points to the source instead of replacing it. Failure records about a production system are written only from the operator's own account. The one exception is a controlled experiment, such as a fault-injection test, where the tester's report is the primary source.
 
-## Planned pieces
+## The pieces
 
 **Skill.** The method the agent follows:
 
@@ -66,7 +82,7 @@ The skill ships with a copy of the cards so it works with no server.
 
 ## MCP server
 
-[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. **It is not deployed yet**: it runs locally under `wrangler dev`, and deployment waits on the choice of account and address.
+[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. It is live at `https://mcp.precedents.dev/mcp` on Cloudflare's Free plan, so it has a daily request quota; when that is spent the static corpus keeps working. It is redeployed by hand, so it can lag `main`: every response states the corpus version it serves.
 
 - Three read-only tools: `precedent_search` (keywords plus kind, workload, topic, tech, footprint and the caller's scale envelope), `precedent_get` (up to eight records or systems per call) and `precedent_facets` (what the corpus covers).
 - Search groups hits as at the caller's scale, at a different scale, of unknown scale, floor not checked, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.

@@ -24,10 +24,19 @@
   // Keep the Worker's own count lines (no query text, no addresses). Do not record request metadata,
   // and keep tracing off explicitly, so that a later compatibility date cannot switch it on.
   "observability": { "enabled": true, "logs": { "invocation_logs": false }, "traces": { "enabled": false } },
-  "workers_dev": true
-  // For a custom domain, add the route and tell the endpoint which hostnames it answers on:
-  // "routes": [{ "pattern": "mcp.example.org", "custom_domain": true }],
-  // "vars": { "ALLOWED_HOSTNAMES": "mcp.example.org" }
-  // Browser pages on that hostname and on localhost may then call it. To allow pages elsewhere as well,
-  // add "ALLOWED_ORIGIN_HOSTNAMES": "app.example.org" (comma-separated; added to the defaults, not replacing them).
+  "workers_dev": true,
+  // Production is the custom domain only: deploy with `--env production`. The workers.dev address is off
+  // there, because a request to it would still cost a Worker invocation even when refused for its host,
+  // bypassing the rate limiting rule on the zone. Bindings and vars are not inherited, so the limiter is repeated.
+  "env": {
+    "production": {
+      "name": "precedent-mcp",
+      "workers_dev": false,
+      "routes": [{ "pattern": "mcp.precedents.dev", "custom_domain": true }],
+      // Browser pages on this hostname and on localhost may call the endpoint. To allow pages elsewhere too,
+      // add "ALLOWED_ORIGIN_HOSTNAMES": "app.example.org" (comma-separated; added to the defaults).
+      "vars": { "ALLOWED_HOSTNAMES": "mcp.precedents.dev" },
+      "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }]
+    }
+  }
 }
