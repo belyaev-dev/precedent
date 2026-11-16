@@ -227,7 +227,9 @@ The server is live at `https://mcp.precedents.dev/mcp`, with the static corpus u
 npm ci && cd mcp && npm ci && npx wrangler deploy --env production
 ```
 
-`wrangler deploy` runs the corpus build first, which validates the cards and stops on a failure, so what is deployed always matches a valid `cards/` in the checkout. Deployment is manual for now: the endpoint serves the corpus as of its last deploy, and the corpus version in every response says which.
+That command runs in GitHub Actions ([`deploy.yml`](../.github/workflows/deploy.yml)) on every push to `main` that changes the cards, the schema, the scripts or the server, after the checks and tests pass. The build validates the cards first and stops on a failure, so what is deployed always matches a valid `cards/`. The workflow then waits for the live endpoint to report the corpus version it just built, and fails if it does not. So the endpoint follows `main` within a few minutes, and the corpus version in every response says which commit's cards it holds.
+
+The workflow's API token is a repository secret limited to this account's Worker scripts and this zone's routes. It is used only on `main` of this repository and never on pull requests.
 
 How production is set up:
 
