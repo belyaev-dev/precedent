@@ -15,11 +15,13 @@ The evidence ships with this skill in `corpus/`. Start with [corpus/INDEX.md](co
 - **No unions.** Do not add up the components of several references. One reference at the user's scale is the baseline; everything else has to earn its place.
 - **Every component is justified, including the obvious ones.** Each needs a requirement of this project and a record that supports it.
 - **Cite records, not memory.** A claim about how real systems behave is either tied to a record id or labelled `uncited`. Do not present general knowledge as evidence.
+- **Cite what the record says, not what you expect it to say.** Before relying on a record for a causal claim, re-read the field you are citing and state it the way the card does. A citation that reverses the card is worse than no citation.
+- **The cards are drafts.** A card whose `review.reviewed_by` says review is pending was checked by machine only. Say so once in the coverage line.
 - **Say when the corpus is silent.** It is small. "No record at this scale" is a finding to report, not a gap to paper over with a poorly matched card.
 
 ## Workflow
 
-Scale the effort to the task. A new system gets all five steps. A single question ("should this job go in a queue?") gets steps 1, 2 and a short ledger. Do not produce design documents nobody asked for.
+Scale the effort and the length to the task. A new system gets all five steps. A single question ("should this job go in a queue?") gets steps 1, 2 and a short ledger. Do not produce design documents nobody asked for.
 
 ### 1. Envelope
 
