@@ -1,0 +1,103 @@
+schema: 1
+id: healthchecks-2025-tarpit-outage
+title: Healthchecks.io's HAProxy tarpit rate limit used up load balancer connection slots during a ping flood from one client
+org: Healthchecks.io
+system: Load balancer rate limiting for the ping endpoints
+architecture:
+  text: "Rate limiting is layered to stop ping floods overloading the database: HAProxy on the load balancers applies a lax first limit, and NGINX on the application servers applies a stricter limit and geo-blocking before requests reach the application."
+  locator: "Section: Tarpit"
+as_of: "2025-11"
+evidence: incident
+workloads: [rate-limiting]
+footprint: null
+scale:
+  # The post gives a request rate for one client's UUID, not the system's traffic, and no data or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: ping requests for the single offending check UUID
+      value: 300
+      unit: requests per second
+      qualifier: sustained; up from 10 requests per second; one client only
+      locator: "Near: increase from 10 requests/second to sustained 300 requests/second"
+source:
+  url: https://blog.healthchecks.io/2025/11/post-mortem-outage-on-november-1/
+  archive_url: null
+  title: "Post-mortem: Outage on November 1"
+  publisher: Healthchecks.io blog
+  author: Pēteris Caune
+  published: "2025-11-03"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [load-shedding-backpressure, observability]
+    title: Tarpit rate limiting held sockets open until the load balancers ran out of connection slots and rejected real traffic
+    trigger:
+      text: "A misconfigured client's ping requests for one specific UUID rose from 10 requests per second to a sustained 300 requests per second."
+      locator: "Section: Timeline"
+    mechanism:
+      text: "HAProxy answered rate-limited clients with the tarpit method, which holds a network socket during its wait before returning 429. The wait was 1 second, but it did not slow this client, and its request rate was high enough that the HAProxy servers began hitting their connection slot limits."
+      locator: "Section: Tarpit"
+    why_defences_failed:
+      text: "A balancer that began rejecting connections was removed from DNS rotation automatically. That raised the load on the remaining balancers and started a chain reaction."
+      locator: "Section: Timeline"
+    impact:
+      text: "From 23:30 UTC on November 1 to 1:10 UTC on November 2, both the website and the ping endpoints had intermittent connectivity problems, with some requests taking several seconds or timing out."
+      locator: "Near: had intermittent connectivity issues in the form"
+    fix:
+      text: "The author blocked the offending IPv4 address and IPv6 /64 subnet with an immediate reject, which returned things to normal, and later the same day changed rate limiting to deny with an HTTP 429 instead of using the tarpit."
+      locator: "Section: The Fix"
+    curator_notes:
+      - "The timeline puts the first load balancer's removal from DNS rotation at 23:39 UTC, the author being woken by notifications at 00:11 UTC, and the offending addresses identified at 01:06 UTC. The post names no earlier detection."
+    aliases:
+      - tarpit exhausts connection slots
+      - haproxy connection limit reached
+      - rate limiting made the outage worse
+      - load balancer removed from dns cascade
+      - misconfigured client ping flood
+      - slow responses tie up sockets
+    tech: [haproxy, nginx]
+  - id: d1
+    kind: decision
+    topics: [load-shedding-backpressure]
+    title: Answer rate-limited requests with an immediate HTTP 429 instead of tarpitting them
+    chosen:
+      text: "After the outage, rate-limited requests are denied immediately with HTTP 429 instead of being tarpitted."
+      locator: "Section: The Fix"
+    rejected:
+      - option: Tarpit (wait, then return 429)
+        reason: "It can slow a client that sends requests one after another but can overwhelm the load balancer when clients make huge numbers of requests in parallel, since each wait holds a socket."
+        locator: "Section: Tarpit"
+    forcing_condition:
+      text: "The November 1 outage, where the tarpit's waiting sockets used up the load balancers' connection slots and legitimate requests were rejected."
+      locator: "Section: Tarpit"
+    rationale:
+      text: "Of the options the author lists, Deny is called the most polite: unlike Reject it tells the client why, and unlike Tarpit it does not hold a socket through a wait."
+      locator: "Section: Tarpit"
+    worked_before:
+      text: "A tarpit with a 1-second wait was used on particularly spammy clients, set short to limit the risk of running out of connection slots."
+      locator: "Section: Tarpit"
+    cost_paid:
+      text: "The author notes that Deny is the most expensive response during an attack: the server still does a full TLS handshake, parses the HTTP request and sends a response for every request."
+      locator: "Section: Tarpit"
+    outcome:
+      text: "By November 5 the author had also added an HTTP request timeout of 5 seconds, a higher maxconn, rate limits covering both the hc-ping.com and hchk.io endpoints (only hc-ping.com had them at the load balancer), a Netdata alert on frontend sessions, and a clearer log format."
+      locator: "Section: Update on November 5, 2025"
+    applies_from: null
+    aliases:
+      - deny versus tarpit
+      - return 429 immediately
+      - haproxy rate limit response
+      - slowloris timeout
+      - alert before maxconn
+    tech: [haproxy, netdata]
