@@ -26,7 +26,7 @@ function numberForms(value) {
 }
 const hasNumber = (value, written = String(value)) =>
   (WORDS[value] && new RegExp(`\\b${WORDS[value]}\\b`).test(source)) ||
-  [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?![\\d])`).test(sourceDigits));
+  [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d)`).test(sourceDigits));
 
 const problems = [];
 function checkLocator(locator, where) {
@@ -60,6 +60,7 @@ for (const record of card.records ?? []) {
     checkFact(record[field], at(field));
   }
   for (const [i, rejected] of (record.rejected ?? []).entries()) {
+    checkText(rejected.option, at(`rejected[${i}]`));
     if (rejected.reason) checkText(rejected.reason, at(`rejected[${i}]`));
     checkLocator(rejected.locator, at(`rejected[${i}]`));
   }

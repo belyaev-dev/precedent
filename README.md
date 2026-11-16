@@ -4,7 +4,7 @@ Evidence for system design. Precedent is a corpus of short, reviewed records of 
 
 It exists because agents design from memory, and memory produces the interview answer: a gateway, five services, a message bus, a cache and a search cluster, whatever the product's actual load. Precedent aims to give the agent something better to reason from: what a team at a comparable scale chose, what forced the choice, what the simpler setup handled before that, and what broke.
 
-> **Status: pre-pilot.** The card format and validator are in place. There are no real cards yet, the skill is not written, and no server is deployed. See [Roadmap](#roadmap).
+> **Status: pilot.** The corpus holds a first batch of draft cards. Each was extracted by a model from its source and checked against that source by a second model and by script, but **none has yet been reviewed by a person**; every card says so in its `review` block. Treat them as leads to verify, not as settled fact. The skill is a first version, and no server is deployed. See [Roadmap](#roadmap).
 
 ## How it is organised
 
@@ -72,7 +72,7 @@ A card restates facts in our own words and stores none of the source's expressio
 
 A site whose `robots.txt` blocks AI crawlers is never fetched by this project's tooling. A person may still read such a post in their own browser and write a card from it by hand, like any other reader. [`scripts/fetch-source.mjs`](scripts/fetch-source.mjs) enforces the first half: it identifies itself honestly and refuses when `robots.txt` disallows it or the common AI crawlers. Fetched text is kept outside the repository and is never committed.
 
-Each card records when its facts were true, when the source was published, when it was retrieved, and who reviewed it.
+Each card records when its facts were true, when the source was published, when it was retrieved, and who reviewed it, or that review is still pending.
 
 ## Corrections and removal
 
@@ -99,7 +99,7 @@ node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
 node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
 ```
 
-`check-source` confirms that every number in a card and every locator appears in the source text. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
+`check-source` confirms that every number in a card, and every `Section:` or `Near:` locator, appears in the source text. Page and timestamp locators are not checked. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
 
 ## Licence
 
