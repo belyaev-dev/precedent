@@ -4,6 +4,7 @@
 // - card text is printed as data. Nothing in it is interpreted, and nothing the caller sent is echoed
 //   except query words reduced to letters and digits and ids that passed a strict pattern.
 import { GROUP_ORDER, type Group, type Hit, type SearchResult } from "./search.ts";
+import { MAX_TOOL_RESULT_BYTES, wireBytes } from "./limits.ts";
 import { flat, isPendingReview } from "./text.ts";
 import { AXES, type AppliesFrom, type Axis, type Card, type CardRecord, type CorpusIndex, type Fact, type Tombstone } from "./types.ts";
 
@@ -249,7 +250,21 @@ export function tombstoneLine(id: string, tombstone: Tombstone, recordId: string
 export const ID_PATTERN = /^[a-z0-9]+(?:-[a-z0-9]+)*(?:#[df][1-9][0-9]?)?$/;
 export const MAX_ID_CHARS = 90;
 
-export function renderGet(index: CorpusIndex, ids: string[]): { text: string; found: number; withdrawn: number; missing: number } {
+export interface GetResult {
+  text: string;
+  found: number;
+  withdrawn: number;
+  missing: number;
+  /** Ids that exist and were not sent, to keep the response within its size limit. */
+  leftOut: number;
+}
+
+/**
+ * Full records and systems for the ids asked for. The response is filled id by id up to maxBytes (as
+ * measured on the wire): once the next id would not fit, it and those after it are named as left out,
+ * to be fetched in another call. Nothing is cut mid-record, and the result is never larger than maxBytes.
+ */
+export function renderGet(index: CorpusIndex, ids: string[], { maxBytes = MAX_TOOL_RESULT_BYTES, origin = "" } = {}): GetResult {
   // Card id -> what was asked of it, in first-seen order, so a card's context is printed once.
   const wanted = new Map<string, { full: boolean; records: string[] }>();
   const notices: string[] = [];
@@ -285,22 +300,61 @@ export function renderGet(index: CorpusIndex, ids: string[]): { text: string; fo
     wanted.set(cardId, entry);
   });
 
-  const lines = [header(index), `"${NOT_STATED}" means the source is silent: do not fill the gap. Lines marked as the reviewer's are the card reviewer's reading, not the source's claim.`];
-  if (notices.length) lines.push("", ...notices);
+  const head = [header(index), `"${NOT_STATED}" means the source is silent: do not fill the gap. Lines marked as the reviewer's are the card reviewer's reading, not the source's claim.`];
+  // Room is kept for the two notices written after the loop, whose length is bounded by the number of ids.
+  const NOTICE_RESERVE = 2048;
+  let used = wireBytes([...head, "", ...notices].join("\n")) + NOTICE_RESERVE;
+  const body: string[] = [];
+  const leftOut: string[] = [];
+  const tooLarge: string[] = [];
   let found = 0;
-  for (const [cardId, { full, records }] of wanted) {
+  let full = false;
+
+  for (const [cardId, asked] of wanted) {
     const card = index.cards[cardId]!;
-    lines.push("", ...cardLines(card, full));
-    if (full) {
+    let contextShown = false;
+    // The system first when it was asked for, then the card's records in the order asked.
+    for (const recordId of [...(asked.full ? [null] : []), ...asked.records]) {
+      const id = recordId ? `${cardId}#${recordId}` : cardId;
+      if (full) {
+        leftOut.push(id);
+        continue;
+      }
+      const lines = [""];
+      if (!recordId) lines.push(...cardLines(card, true), `cite the system as: ${citation(index, card, null)}`);
+      else {
+        if (!contextShown) lines.push(...cardLines(card, false), "");
+        lines.push(...recordLines(index, card, card.records.find((r) => r.id === recordId)!));
+      }
+      const size = wireBytes(lines.join("\n")) + 2;
+      if (used + size > maxBytes) {
+        // An id that would not fit even in a response of its own cannot be had from this tool at all.
+        if (found === 0 && body.length === 0 && leftOut.length === 0) tooLarge.push(id);
+        else {
+          full = true;
+          leftOut.push(id);
+        }
+        continue;
+      }
+      used += size;
       found += 1;
-      lines.push(`cite the system as: ${citation(index, card, null)}`);
-    }
-    for (const recordId of records) {
-      found += 1;
-      lines.push("", ...recordLines(index, card, card.records.find((r) => r.id === recordId)!));
+      contextShown = true;
+      body.push(...lines);
     }
   }
-  return { text: lines.join("\n"), found, withdrawn, missing };
+
+  if (tooLarge.length) {
+    notices.push(
+      ...tooLarge.map((id) => `TOO LARGE ${id}: it is in the corpus, but it renders to more than this tool sends in one response. Read it in the static corpus: ${origin}/corpus/cards/${id.split("#")[0]}.json`),
+    );
+  }
+  if (leftOut.length) {
+    notices.push(`LEFT OUT to keep this response within its size limit: ${leftOut.join(", ")}. They are in the corpus and nothing is wrong with them: fetch them in another call.`);
+  }
+  const lines = [...head];
+  if (notices.length) lines.push("", ...notices);
+  lines.push(...body);
+  return { text: lines.join("\n"), found, withdrawn, missing: missing + tooLarge.length, leftOut: leftOut.length };
 }
 
 /** A count read as an own property only: the keys of these objects come from cards. */

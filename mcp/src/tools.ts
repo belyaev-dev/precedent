@@ -1,6 +1,7 @@
 // The three tools. All are read-only lookups in the compiled index.
 import { McpServer } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import { MAX_TOOL_RESULT_BYTES, wireBytes } from "./limits.ts";
 import { MAX_ID_CHARS, renderFacets, renderGet, renderSearch } from "./render.ts";
 import { DEFAULT_LIMIT, MAX_LIMIT, search } from "./search.ts";
 import { MAX_QUERY_CHARS } from "./text.ts";
@@ -64,10 +65,26 @@ const getSchema = z.strictObject({
 
 const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] });
 
+/**
+ * A tool's answer, or an honest error if it would be larger than this endpoint sends. precedent_get keeps
+ * within the limit by itself, id by id; this is what the other tools fall back on, so that an answer
+ * that is merely big is never reported as anything else.
+ */
+export function answer(value: string, narrow: string, origin: string) {
+  const size = wireBytes(value);
+  if (size <= MAX_TOOL_RESULT_BYTES) return text(value);
+  return {
+    isError: true,
+    ...text(
+      `This answer would be ${size} bytes, more than the ${MAX_TOOL_RESULT_BYTES} this endpoint sends in one response, so it was not sent. ${narrow} The whole corpus is a static file with no such limit: ${origin}/corpus/corpus.json`,
+    ),
+  };
+}
+
 /** Schemas are built once per isolate; a server instance is built per request and only refers to them. */
 export function toolset(index: CorpusIndex) {
   const schema = searchSchema(index);
-  return function register(server: McpServer, log: Log): void {
+  return function register(server: McpServer, log: Log, origin: string): void {
     server.registerTool(
       "precedent_search",
       {
@@ -82,7 +99,7 @@ export function toolset(index: CorpusIndex) {
       (args) => {
         const result = search(index, args);
         log({ event: "search", matched: result.matched, shown: result.hits.length, at_scale: result.counts.at_scale, envelope: Object.keys(result.envelope).length });
-        return text(renderSearch(index, result, { kindGiven: Boolean(args.kind?.length) }));
+        return answer(renderSearch(index, result, { kindGiven: Boolean(args.kind?.length) }), "Lower `limit`, or narrow the search.", origin);
       },
     );
 
@@ -92,14 +109,14 @@ export function toolset(index: CorpusIndex) {
         title: "Get Precedent records",
         description:
           "Fetch full records or systems by id, several per call. A record comes with its system's context, every fact with its locator in the source, an explicit 'not stated in the source' for anything the source is silent on, and the reviewer's notes labelled as the reviewer's. " +
-          "A withdrawn id returns a withdrawal notice and no content. Read the record before citing it, and state its facts the way it states them.",
+          "A withdrawn id returns a withdrawal notice and no content. If the ids asked for do not fit in one response, the ones left out are named: fetch them in another call. Read the record before citing it, and state its facts the way it states them.",
         inputSchema: getSchema,
         annotations: { ...READ_ONLY, title: "Get Precedent records" },
       },
       ({ ids }) => {
-        const result = renderGet(index, ids);
-        log({ event: "get", asked: ids.length, found: result.found, withdrawn: result.withdrawn, missing: result.missing });
-        return text(result.text);
+        const result = renderGet(index, ids, { origin });
+        log({ event: "get", asked: ids.length, found: result.found, withdrawn: result.withdrawn, missing: result.missing, left_out: result.leftOut });
+        return answer(result.text, "Ask for fewer ids in one call.", origin);
       },
     );
 
@@ -114,7 +131,7 @@ export function toolset(index: CorpusIndex) {
       },
       () => {
         log({ event: "facets" });
-        return text(renderFacets(index));
+        return answer(renderFacets(index), "Read the corpus as a file instead.", origin);
       },
     );
   };
