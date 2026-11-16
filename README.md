@@ -68,7 +68,7 @@ Primary sources only: engineering posts by the organisation that runs the system
 
 A card restates facts in our own words and stores none of the source's expression. A source is not used at all when its publisher has said it does not want that: a no-derivatives licence, terms that forbid summarising or reuse, an explicit reservation of rights against AI use of the content, or a direct request. Where a card does lean on a source's licence, that licence must allow republishing an adaptation under CC BY 4.0, which share-alike and non-commercial licences do not.
 
-How to treat sites whose `robots.txt` blocks AI crawlers is not yet decided, and will be settled and written here before the first real card is added.
+A site whose `robots.txt` blocks AI crawlers is never fetched by this project's tooling. A person may still read such a post in their own browser and write a card from it by hand, like any other reader. [`scripts/fetch-source.mjs`](scripts/fetch-source.mjs) enforces the first half: it identifies itself honestly and refuses when `robots.txt` disallows it or the common AI crawlers. Fetched text is kept outside the repository and is never committed.
 
 Each card records when its facts were true, when the source was published, when it was retrieved, and who reviewed it.
 
@@ -91,7 +91,13 @@ If a card misstates its source, is out of date, or you are the publisher and wan
 ```bash
 npm install
 npm run validate   # checks every card in cards/ and schema/examples/
+
+# Writing a card: fetch the source text to a file outside the repo, then check the card against it.
+node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
+node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
 ```
+
+`check-source` confirms that every number in a card and every locator appears in the source text. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
 
 ## Licence
 
