@@ -1,0 +1,110 @@
+schema: 1
+id: healthchecks-2026-object-storage
+title: A one-person Healthchecks.io swaps managed S3 storage for a Versity gateway on one server holding 119GB of ping bodies
+org: Healthchecks.io
+system: Ping request body storage (S3-compatible object storage)
+architecture:
+  text: "Healthchecks.io keeps the first 100kB of each ping request body: tiny bodies go in PostgreSQL, larger ones in S3-compatible object storage. That storage is now Versity S3 Gateway over a Btrfs filesystem on one dedicated server, instead of a managed provider."
+  locator: "Near: stores the first 100kB of the request body"
+as_of: "2026-04"
+evidence: production
+workloads: [blob-pipeline]
+footprint:
+  shape: single-node
+  locator: "Near: The objects live on a single system"
+scale:
+  # All three tiers rest on figures the post gives for the object storage system itself, as of April 2026.
+  # The spike figure is "regular spikes", not a stated maximum.
+  traffic:
+    tier: 2
+    basis: stated
+    note: "The post gives 30 uploads per second on average with regular spikes to 150, which falls in tier 2 (100 to under 1,000). The spikes are described as regular, not as an all-time maximum."
+  data:
+    tier: 2
+    basis: stated
+  team:
+    tier: 0
+    basis: stated
+  metrics:
+    - axis: traffic
+      name: object uploads during regular spikes
+      value: 150
+      unit: uploads per second
+      qualifier: regular spikes; object storage only; April 2026
+      locator: "Near: regular spikes to 150 uploads/second"
+    - axis: other
+      name: average object uploads
+      value: 30
+      unit: uploads per second
+      qualifier: average; object storage only; April 2026
+      locator: "Near: 30 upload operations per second on average"
+    - axis: data
+      name: object storage used for ping bodies
+      value: 119
+      unit: GB
+      qualifier: April 2026; the object store only, not the PostgreSQL database
+      locator: "Near: 14 million objects, 119GB"
+    - axis: other
+      name: objects stored
+      value: 14000000
+      unit: objects
+      qualifier: April 2026; sizes range from 100 bytes to 100'000 bytes
+      locator: "Near: 14 million objects, 119GB"
+    - axis: team
+      name: people running Healthchecks.io
+      value: 1
+      unit: person
+      qualifier: the author calls it a one-person team
+      locator: "Near: Since I’m a one-person team"
+source:
+  url: https://blog.healthchecks.io/hp-rewrite/ef1c020a51468831feed9c6252a3f652
+  archive_url: null
+  title: Healthchecks.io Now Uses Self-hosted Object Storage
+  publisher: Healthchecks.io blog
+  author: Pēteris Caune
+  published: "2026-04-17"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, capacity-cost, backup-restore]
+    title: Replace managed object storage with Versity S3 Gateway on one server, backed up by rsync, to stop provider slowdowns
+    chosen:
+      text: "In March 2026 the S3 API moved to Versity S3 Gateway on a dedicated server, storing objects as files on a Btrfs filesystem over two NVMe drives in RAID 1. Application servers reach it over Wireguard. Every two hours rsync copies changes to a backup server."
+      locator: "Section: The Setup"
+    rejected:
+      - option: AWS S3, ruled out in the 2022 evaluation
+        reason: "Per-request pricing would be expensive for frequent PutObject calls, and because of the CLOUD Act the data would need encrypting before it was handed over, adding complexity."
+        locator: "Section: The Managed Options"
+      - option: Self-hosted Minio, SeaweedFS or Garage clusters
+        reason: "A production-ready cluster needs automated node setup, tested update and node-replacement procedures, and cluster monitoring, which a one-person team already running Postgres, HAProxy and email wanted to avoid."
+        locator: "Section: The Self-Hosted Options"
+    forcing_condition:
+      text: "Managed providers degraded over time: OVHcloud gave increasing performance and reliability problems, and UpCloud, used from 2024, later had periods where all operations were slow and hit timeouts, with DeleteObjects getting steadily slower."
+      locator: "Section: The Managed Options"
+    rationale:
+      text: "The gateway turns a local filesystem into an S3 server with no separate metadata database, any backup tool can copy the files, and an upgrade is replacing one binary and restarting a systemd service."
+      locator: "Section: Versity S3 Gateway"
+    worked_before:
+      text: "OVHcloud was the first pick, evaluated in 2022 while body offloading was implemented. The author moved to UpCloud in 2024, a clear improvement at first. Each provider later deteriorated."
+      locator: "Section: The Managed Options"
+    cost_paid:
+      text: "Durability now rests on one server and its backups: if both of its drives fail at once, up to 2 hours of ping bodies not yet synced to the backup server could be lost."
+      locator: "Near: both drives on the object storage server fail"
+    outcome:
+      text: "S3 latency dropped and the queue of ping bodies waiting for upload shrank. No availability issues so far, though it had been live only a couple of weeks. Cost rose, since renting a dedicated server costs more than storing about 100GB at a managed provider."
+      locator: "Section: The Results"
+    applies_from: null
+    curator_notes:
+      - "The author says this suits the current size, where everything fits on one system, and that many-terabyte needs would complicate it. Object storage is described as less critical than the PostgreSQL database."
+    aliases:
+      - s3 compatible gateway on a filesystem
+      - object storage slow timeouts
+    tech: [versity-s3-gateway, btrfs, s3, ovhcloud, upcloud]
