@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Runs the benchmark: each design task, at each size, answered with and without the skill, then judged.
-// Usage: node bench/run.mjs [--tasks id,id] [--sizes small,large] [--runs N] [--model M] [--judge M] [--parallel N] [--runner claude|bb]
+// Usage: node bench/run.mjs [--tasks id,id] [--sizes small,large] [--runs N] [--model M] [--judge M] [--parallel N] [--runner claude|bb] [--words N]
 // --runner claude (default) needs a logged-in `claude` CLI. --runner bb runs each call as a throwaway bb thread,
 // for machines where Claude is reached through bb. Results go to bench/results/<timestamp>/ (not committed).
 import { execFile, spawn } from "node:child_process";
@@ -25,10 +25,11 @@ const model = flag("model", "sonnet");
 const judgeModel = flag("judge", "opus");
 const parallel = Number(flag("parallel", "4"));
 const runner = flag("runner", "claude");
+const words = Number(flag("words", "800"));
 const outDir = join(root, "bench/results", new Date().toISOString().replace(/[:.]/g, "-"));
 mkdirSync(outDir, { recursive: true });
 
-const ENDING = `Do not ask questions; where a number is missing, state your assumption. Keep the answer under 800 words.
+const ENDING = `Do not ask questions; where a number is missing, state your assumption. Keep the answer under ${words} words.
 End with one final line that starts with "COMPONENTS:" and lists every infrastructure component in your design, separated by semicolons: each deployable service, datastore, queue, cache, and external service. List nothing you rejected.`;
 const ARMS = {
   base: (brief) => `Answer from your own knowledge. Do not use tools, files, skills or the web.\n\n${brief}\n\n${ENDING}`,
@@ -158,7 +159,7 @@ const mean = (xs) => (xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : Na
 const fmt = (n) => (Number.isNaN(n) ? "-" : n.toFixed(2));
 const good = verdicts.filter((v) => !v.error);
 const criteria = ["fit", "requirements", "failures", "justification", "usable"];
-const lines = [`# Benchmark ${outDir.split("/").pop()}`, "", `Subject model ${model}, judge ${judgeModel}, ${runs} run(s) per brief and arm, ${good.length} judged pairs.`, ""];
+const lines = [`# Benchmark ${outDir.split("/").pop()}`, "", `Subject model ${model}, judge ${judgeModel}, ${runs} run(s) per brief and arm, answers capped at ${words} words, ${good.length} judged pairs.`, ""];
 const slices = { all: () => true, "small briefs": (v) => v.size === "small", "large briefs": (v) => v.size === "large", "corpus covers the workload": (v) => v.covered, "corpus does not cover it": (v) => !v.covered };
 lines.push("| Slice | Pairs | Skill preferred | Base preferred | Tie | " + criteria.map((c) => `${c} (skill / base)`).join(" | ") + " |", "|---|---|---|---|---|" + criteria.map(() => "---").join("|") + "|");
 for (const [name, keep] of Object.entries(slices)) {
