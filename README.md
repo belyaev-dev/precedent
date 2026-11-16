@@ -82,7 +82,7 @@ The skill ships with a copy of the cards so it works with no server.
 
 ## MCP server
 
-[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. It is live at `https://mcp.precedents.dev/mcp` on Cloudflare's Free plan, so it has a daily request quota; when that is spent the static corpus keeps working. It is redeployed by hand, so it can lag `main`: every response states the corpus version it serves.
+[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. It is live at `https://mcp.precedents.dev/mcp` on Cloudflare's Free plan, so it has a daily request quota; when that is spent the static corpus keeps working. It is redeployed automatically when the cards or the server change on `main`, and every response states the corpus version it serves.
 
 - Three read-only tools: `precedent_search` (keywords plus kind, workload, topic, tech, footprint and the caller's scale envelope), `precedent_get` (up to eight records or systems per call) and `precedent_facets` (what the corpus covers).
 - Search groups hits as at the caller's scale, at a different scale, of unknown scale, floor not checked, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.

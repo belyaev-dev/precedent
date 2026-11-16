@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Checks a deployed Precedent endpoint from outside. Usage: live-check.py <base url>
+"""Checks a deployed Precedent endpoint from outside. Usage: live-check.py <base url> [--expect-version <hash>]
 
 Fails unless the static corpus downloads whole and holds cards, and the MCP endpoint returns real
-records for a fetch and a search. Standard library only.
+records for a fetch and a search. With --expect-version it also fails unless that is the corpus version
+served, which is how a deploy confirms it took effect. Standard library only.
 """
 import json
 import re
@@ -11,6 +12,7 @@ import urllib.error
 import urllib.request
 
 base = sys.argv[1].rstrip("/")
+expected = sys.argv[sys.argv.index("--expect-version") + 1] if "--expect-version" in sys.argv else None
 ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
@@ -56,6 +58,8 @@ version = corpus.get("corpus_version")
 cards = corpus.get("cards")
 if not (isinstance(version, str) and re.fullmatch(r"[0-9a-f]{12}", version)):
     fail(f"corpus_version is not a 12-character hash: {version!r}")
+if expected and version != expected:
+    fail(f"static corpus is version {version}, expected {expected}")
 if not (isinstance(cards, list) and len(cards) >= 10):
     fail(f"expected at least 10 cards, found {len(cards) if isinstance(cards, list) else type(cards).__name__}")
 live = [c for c in cards if c.get("status") != "retracted"]
