@@ -235,6 +235,8 @@ How production is set up:
 - **Origins.** `ALLOWED_HOSTNAMES` is the custom hostname. Browser pages may call the endpoint from that origin and from local development origins; `ALLOWED_ORIGIN_HOSTNAMES` would add more. Clients that send no `Origin` (every non-browser client) are unaffected.
 - **Edge rate limiting.** One rate limiting rule on the zone blocks a client address that sends more than 40 requests in 10 seconds to `/mcp`, for 10 seconds, before the request reaches the Worker. In a test of 150 requests over about five seconds, 101 were refused at the edge.
 - **Worker rate limiting.** The binding's 120 requests a minute per client, explained under [Limits](#limits).
+- **Browser Integrity Check is off for the zone.** Left on, Cloudflare answers clients with library user agents (Python's `urllib`, for one) with error 1010 before they reach the static corpus, which exists to be fetched by scripts.
+- **A live check** ([`scripts/live-check.py`](../scripts/live-check.py), run daily by GitHub Actions) downloads the static corpus, fetches three cards and searches for a record by its title, and fails if any of that returns less than real content.
 
 ### The request quota
 
