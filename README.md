@@ -88,6 +88,10 @@ If a card misstates its source, is out of date, or you are the publisher and wan
 2. **Server.** Put the same cards behind the Worker; measure CPU per request and database rows read to choose between a bundled index and D1.
 3. **Corpus.** Grow by workload shape, deep before wide.
 
+## Contributing
+
+Cards are written under the rules in [CONTRIBUTING.md](CONTRIBUTING.md). Source suggestions are welcome as issues.
+
 ## Development
 
 ```bash
