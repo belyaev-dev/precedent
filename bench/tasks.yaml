@@ -1,0 +1,57 @@
+# Design tasks for the benchmark. Each task is asked at two sizes, because the thing under test is
+# whether a design fits its scale. `covered` says whether the corpus has cards for the workload, so
+# that results can be split into "evidence available" and "evidence absent".
+sizes:
+  small: "We are {team} engineers. Expect about {rps} requests per second at peak and roughly {data} of data in the first year. We run on one cloud provider and already use Postgres."
+  large: "About {team} engineers own this system. Peak is about {rps} per second, with roughly {data} of data, and it has to keep working through the loss of a machine or a zone. We run on one cloud provider and already use Postgres."
+tasks:
+  - id: url-shortener
+    covered: false
+    ask: "Design a link-shortening service: create short links, redirect them, and show click counts per link."
+    small: { team: 2, rps: 20, data: "5 GB" }
+    large: { team: 12, rps: "20,000", data: "2 TB" }
+  - id: webhook-delivery
+    covered: true
+    ask: "Design outbound webhook delivery for our API: customers register endpoints and must be told about events. An event must not be silently lost, one customer's broken endpoint must not delay the others, and customers want to see what happened to a given webhook."
+    small: { team: 3, rps: 30, data: "20 GB" }
+    large: { team: 8, rps: "5,000", data: "1 TB" }
+  - id: background-jobs
+    covered: true
+    ask: "Design background job processing for our web application: emails, report generation and third-party API calls must not block requests. A job must not be lost once the request that created it has succeeded, and some jobs must run at a scheduled time."
+    small: { team: 3, rps: 15, data: "10 GB" }
+    large: { team: 15, rps: "8,000", data: "500 GB" }
+  - id: multi-tenant-saas
+    covered: true
+    ask: "Design the data layer for a B2B SaaS product where each customer organisation has its own users and records. One customer must never see another's data, a large customer must not slow down the rest, and we must be able to restore one customer's data after an accident."
+    small: { team: 4, rps: 40, data: "30 GB" }
+    large: { team: 25, rps: "6,000", data: "8 TB" }
+  - id: rate-limiter
+    covered: false
+    ask: "Design rate limiting for our public API: per-customer limits by plan, enforced consistently across all API servers, with limits that can be changed without a deploy."
+    small: { team: 3, rps: 50, data: "5 GB" }
+    large: { team: 10, rps: "50,000", data: "200 GB" }
+  - id: chat
+    covered: false
+    ask: "Design the backend for in-app team chat: channels, direct messages, message history and delivery to users who are online. A sent message must not be lost, and history must load quickly."
+    small: { team: 4, rps: 25, data: "15 GB" }
+    large: { team: 30, rps: "30,000", data: "5 TB" }
+  - id: notifications
+    covered: false
+    ask: "Design a notification service that sends email and push notifications for product events, respects each user's preferences and quiet hours, and never sends the same notification twice."
+    small: { team: 2, rps: 10, data: "5 GB" }
+    large: { team: 12, rps: "15,000", data: "600 GB" }
+  - id: file-processing
+    covered: false
+    ask: "Design upload and processing of user files: users upload images and PDFs up to 100 MB, we generate previews and extract text, and the user sees progress. A file must not be lost once the upload is confirmed."
+    small: { team: 3, rps: 5, data: "200 GB" }
+    large: { team: 14, rps: "2,000", data: "80 TB" }
+  - id: activity-feed
+    covered: false
+    ask: "Design an activity feed: each user sees recent activity from the people and projects they follow, newest first, with pagination."
+    small: { team: 3, rps: 30, data: "10 GB" }
+    large: { team: 20, rps: "40,000", data: "3 TB" }
+  - id: payments-ledger
+    covered: false
+    ask: "Design the ledger for a product that holds customer balances and moves money between them. A transfer must never be applied twice or half-applied, and every balance must be explainable from its history."
+    small: { team: 4, rps: 10, data: "10 GB" }
+    large: { team: 18, rps: "3,000", data: "1 TB" }
