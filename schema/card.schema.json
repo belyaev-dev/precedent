@@ -53,7 +53,7 @@
       "pattern": "^(?![\\s\\S]*(\\]\\(|://|`|<[A-Za-z/!]))[\\s\\S]*$"
     },
     "locator": {
-      "description": "Where in the source the statement is made: a section heading, page number, or talk timestamp. A bare URL is not a locator.",
+      "description": "Where in the source the statement is made, in a form check-source can verify: 'Section: <heading as written>', or 'Near: <up to eight consecutive words from the passage>' for sources without headings, or 'Page 7' / 'At 12:30' for papers and talks. A bare URL is not a locator.",
       "type": "string",
       "minLength": 2,
       "maxLength": 160,
