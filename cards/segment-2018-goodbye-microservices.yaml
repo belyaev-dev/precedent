@@ -1,0 +1,230 @@
+schema: 1
+id: segment-2018-goodbye-microservices
+title: Segment folds over 140 per-destination microservices, queues and repos back into one monolith fed by Centrifuge
+org: Twilio Segment
+system: Server-side destinations pipeline
+architecture:
+  text: "After the change, all server-side destinations run in one monolithic service. Centrifuge, which this move inspired, was to replace the individual per-destination queues and be responsible for sending events to that single service."
+  locator: "Section: Ditching Microservices and Queues"
+components:
+  - name: Ingest API and queue
+    role: "Takes events, JSON objects from web or mobile apps that describe users and their actions, and puts them on a distributed message queue. This is the original, simple architecture."
+    locator: "Section: Why Microservices worked"
+  - name: Centrifuge
+    role: "Built to replace all the individual destination queues and be responsible for sending events to the single monolithic service. It became the back-end infrastructure for Connections."
+    tech: centrifuge
+    locator: "Section: Ditching Microservices and Queues"
+  - name: Destination service
+    role: "One service holding every destination, merged once all destination code lived in a single repo. It mixes CPU- and memory-intensive destinations, its large worker pool absorbs load spikes, and one engineer can deploy it in minutes."
+    locator: "Section: Why a Monolith works"
+  - name: Traffic Recorder
+    role: "A test tool built on yakbak that records each destination test's HTTP requests and responses on the first run and replays them later, with the files checked into the repo."
+    tech: yakbak
+    locator: "Section: Building a Resilient Test Suite"
+as_of: "2018-07"
+evidence: production
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  # The post states its event rate in words ("hundreds of thousands of events per second"),
+  # which no metric can carry, so no traffic tier is set. It gives no data size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: destination services consolidated into one
+      value: 140
+      unit: services
+      qualifier: over
+      locator: "Near: now over 140 services into a single service"
+    - axis: other
+      name: unique dependencies pinned to one version each
+      value: 120
+      unit: dependencies
+      qualifier: unique; each pinned to one version for all destinations
+      locator: "Near: For each of the 120 unique dependencies"
+    - axis: other
+      name: processes the in-memory caches are spread across
+      value: 3000
+      unit: processes
+      qualifier: more than; after consolidation
+      locator: "Near: spread thinly across 3000+ processes"
+    - axis: other
+      name: engineers spending most of their time keeping the system alive
+      value: 3
+      unit: engineers
+      qualifier: full-time; during the worst period of the microservice setup
+      locator: "Near: 3 full-time engineers spending most of their time"
+source:
+  url: https://segment.com/blog/goodbye-microservices/
+  archive_url: null
+  title: "Goodbye Microservices: From 100s of problem children to 1 superstar"
+  publisher: Twilio Blog
+  author: Alexandra Noonan
+  published: "2018-07-10"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, tenant-isolation]
+    title: Give every destination its own queue and service so one slow destination cannot delay the rest
+    chosen:
+      text: "A separate service and queue for each destination, plus a router process that receives inbound events and gives a copy to each selected destination."
+      locator: "Section: Why Microservices worked"
+    rejected: []
+    forcing_condition:
+      text: "One queue held both the newest events and retries across all destinations. When one destination slowed or went down, retries flooded the queue and queue depth rose faster than autoscaling could respond, delaying delivery to every destination."
+      locator: "Section: Why Microservices worked"
+    rationale:
+      text: "Only the queue of the troubled destination backs up, so destinations are isolated from one another, which was crucial because destinations often have problems."
+      locator: "Section: Why Microservices worked"
+    worked_before:
+      text: "At launch an API fed events into a distributed message queue, and each event was sent to each selected destination's API in turn."
+      locator: "Section: Why Microservices worked"
+    cost_paid:
+      text: "Operational overhead grew linearly with each added destination, since each needed another repo, queue and service. Each service had its own load pattern, so autoscaling was more art than science, and operators scaled quiet services by hand for spikes."
+      locator: "Section: Scaling Microservices and Repos"
+    outcome:
+      text: "It isolated destinations and solved the immediate performance issues, but the setup was not ready to scale, lacking tooling for testing and deploying bulk updates, so developer productivity quickly declined."
+      locator: "Section: Conclusion"
+    applies_from: null
+    aliases:
+      - head of line blocking
+      - queue per destination
+      - isolate slow consumers
+      - retries flood the shared queue
+      - microservice per integration
+    tech: []
+  - id: d2
+    kind: decision
+    topics: [service-boundaries, deployment-rollout]
+    title: Split each destination's code into its own repo to isolate test failures
+    chosen:
+      text: "The code for each destination was broken out into its own repo."
+      locator: "Section: The Case for Individual Repos"
+    rejected: []
+    forcing_condition:
+      text: "With all destination code in one repo, a single broken test failed the tests of every destination, and a change could not be deployed until that unrelated test was fixed, which the team calls a huge point of frustration."
+      locator: "Section: The Case for Individual Repos"
+    rationale:
+      text: "Every destination was already its own service, so giving each its own repo was a natural transition."
+      locator: "Section: The Case for Individual Repos"
+    worked_before:
+      text: "When the destinations were first divided into separate services, all of their code still lived in one repo."
+      locator: "Section: The Case for Individual Repos"
+    cost_paid:
+      text: "More than 50 new destinations meant 50 new repos. Changes to shared libraries had to be tested and deployed across dozens of services, so engineers updated them in one destination only, and library versions diverged until every destination used a different one."
+      locator: "Section: Scaling Microservices and Repos"
+    outcome:
+      text: "At first the split isolated the destination test suites and let the team move quickly. The team later judged the isolation a false advantage: tests that made HTTP requests still failed with some frequency, there was little motivation to clean them up, and a small change that should have taken an hour or two could take a couple of days to a week."
+      locator: "Section: Moving to a Monorepo"
+    applies_from: null
+    curator_notes:
+      - "The team later moved all destination code back into one repo, described in d4."
+    aliases:
+      - repo per service
+      - polyrepo versus monorepo
+      - isolate test failures per repo
+      - shared library version drift
+    tech: []
+  - id: d3
+    kind: decision
+    topics: [service-boundaries, capacity-cost]
+    title: Consolidate the over 140 destination services into one service, with Centrifuge replacing the queues
+    chosen:
+      text: "All destinations were merged into a single service. Centrifuge was to replace the individual per-destination queues and be responsible for sending events to that one service."
+      locator: "Section: Ditching Microservices and Queues"
+    rejected:
+      - option: One service whose workers check every per-destination queue for work
+        reason: "It would have added a layer of complexity to the destination service that the team was not comfortable with, and it was the main inspiration for Centrifuge."
+        locator: "Near: each worker would have to check every queue"
+      - option: Redis for the in-memory caches of control plane data
+        reason: "It would be another point of scaling to account for, so the team accepted the loss of cache efficiency in return for the operational benefits."
+        locator: "Near: We could use something like Redis"
+    forcing_condition:
+      text: "Managing over 140 services was a huge tax on the team, and the on-call engineer was commonly paged to deal with load spikes."
+      locator: "Section: Ditching Microservices and Queues"
+    rationale: null
+    worked_before: null
+    cost_paid:
+      text: "A bug in one destination that crashes the service crashes it for all destinations. In-memory caches of control plane data are spread across 3000+ processes and are much less likely to be hit. Updating a dependency may break several destinations."
+      locator: "Section: Trade Offs"
+    outcome:
+      text: "One engineer can deploy the service in minutes instead of 140+ services per shared-library change. Shared-library improvements went from 32 under microservices to 46 one year later. A mix of CPU- and memory-intensive destinations made scaling much easier, and the large worker pool absorbs load spikes, so the team is no longer paged for low-load destinations."
+      locator: "Section: Why a Monolith works"
+    applies_from: null
+    curator_notes:
+      - "The post does not say over what period the 32 improvements were made, so the two counts may not cover equal spans."
+      - "The post says the team was working on a more robust way to stop one destination from taking down the whole service while keeping destinations in one monolith."
+    aliases:
+      - microservices back to monolith
+      - consolidate services
+      - one service for all integrations
+      - fault isolation versus operational overhead
+      - on call paging for load spikes
+    tech: [centrifuge]
+  - id: d4
+    kind: decision
+    topics: [service-boundaries, deployment-rollout]
+    title: Merge all destination code into one repo with a single version of every dependency
+    chosen:
+      text: "All destination code moved into one repo. For each of the 120 unique dependencies the team committed to one version for all destinations, updating each destination to the latest versions as it moved over and fixing what broke."
+      locator: "Section: Moving to a Monorepo"
+    rejected:
+      - option: Build tools to automate rolling out shared-library changes across the separate repos
+        reason: "By then developer productivity was suffering and other problems with the microservice architecture had appeared as well."
+        locator: "Near: We could've built tools to automate"
+    forcing_condition: null
+    rationale:
+      text: "With only one service planned, it made sense to move all destination code, dependencies and tests into one repo."
+      locator: "Section: Moving to a Monorepo"
+    worked_before:
+      text: "Shared libraries had made new destinations quick to build and maintenance less of a headache through uniform functionality."
+      locator: "Section: Scaling Microservices and Repos"
+    cost_paid:
+      text: "Adopting a newer library version may force other destinations to be updated to work with it. The team judged the simplicity worth that and relied on its automated tests to show what breaks."
+      locator: "Section: Trade Offs"
+    outcome:
+      text: "With every destination on the same version of each dependency, the team no longer had to track version differences, complexity across the codebase dropped significantly, and maintaining destinations became less time consuming and less risky."
+      locator: "Section: Moving to a Monorepo"
+    applies_from: null
+    aliases:
+      - monorepo for integrations
+      - one version of each dependency
+      - shared library divergence
+      - move services into one repository
+    tech: []
+  - id: d5
+    kind: decision
+    topics: [deployment-rollout]
+    title: Record and replay destination HTTP traffic in tests so the merged repo's suite is fast and reliable
+    chosen:
+      text: "Traffic Recorder, built on yakbak, saves each destination test's requests and responses to a file on the first run and plays them back on later runs. The files are checked into the repo so tests are consistent across every change."
+      locator: "Section: Building a Resilient Test Suite"
+    rejected: []
+    forcing_condition:
+      text: "Outbound HTTP requests to destination endpoints during test runs were the primary cause of failing tests, and some destinations took up to 5 minutes to run their tests, so with over 140 destinations the whole suite could take up to an hour."
+      locator: "Section: Building a Resilient Test Suite"
+    rationale:
+      text: "Unrelated issues such as expired credentials should not fail tests, and removing the dependence on requests over the internet was a must-have for moving to a single repo."
+      locator: "Section: Building a Resilient Test Suite"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "Running the tests for all 140+ destinations took milliseconds once Traffic Recorder was integrated, where a single destination could previously take a couple of minutes."
+      locator: "Section: Building a Resilient Test Suite"
+    applies_from: null
+    aliases:
+      - record and replay http in tests
+      - fake network in integration tests
+      - flaky third party tests
+      - vcr style test fixtures
+    tech: [yakbak]

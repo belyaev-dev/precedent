@@ -1,0 +1,155 @@
+schema: 1
+id: pusher-2020-webhooks-kinesis
+title: Pusher moves Channels webhooks off self-hosted beanstalkd and a Ruby packager to Kinesis, SQS and a Go consumer, with a one-step cutover
+org: Pusher
+system: Channels webhooks
+architecture:
+  text: "At the heart of Channels webhooks is a generic event stream on beanstalkd. A packager process turns the events that should lead to a customer webhook into jobs on a send_webhook queue, and sender processes make the HTTP requests to customer servers."
+  locator: "Section: Existing Webhook Architecture"
+components:
+  - name: Stream queue on beanstalkd
+    role: "When certain events occur in Channels, a job with the event's details is put on it. It is divided into numbered shards, each its own beanstalkd queue, and a packager must hold a lock to consume a shard."
+    tech: beanstalkd
+    locator: "Section: Sharding"
+  - name: Packager process
+    role: "Reads the stream, picks the events that should produce a webhook, builds the body, headers and URL, and also debounces cancelling events and batches similar ones. It is Ruby EventMachine code limited to one core, so several run."
+    tech: eventmachine
+    locator: "Section: Existing Webhook Architecture"
+  - name: send_webhook queue
+    role: "Holds ready-to-send webhook jobs on beanstalkd. It is not sharded, because senders are stateless and any number can consume it."
+    locator: "Section: Sharding"
+  - name: Sender process
+    role: "Takes jobs from the send_webhook queue and makes the HTTP request to the customer server."
+    locator: "Section: Existing Webhook Architecture"
+  - name: Kinesis stream and Go packager
+    role: "The replacement for the stream queues. Kinesis streams are sharded by default, and a Go service built on kinsumer, a library that replicates the functionality of the Kinesis Client Library in Go, consumes them. The Client Library handles shard rebalancing and checkpointing."
+    tech: kinesis
+    locator: "Near: Kinesis streams are sharded by default"
+  - name: SQS send queue
+    role: "The replacement for the send_webhook queue, which senders consume."
+    tech: sqs
+    locator: "Near: SQS seemed like a drop in replacement"
+as_of: null
+evidence: production
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  # The rate is the event volume on the larger Channels clusters, not webhook deliveries.
+  # The post gives no data size or team size.
+  traffic:
+    tier: 4
+    basis: stated
+    note: "The post gives 60,000-70,000 events per second on larger Channels clusters, which falls in tier 4 (10,000 to under 100,000). It is event-stream volume on those clusters, not the count of webhooks delivered."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: event stream volume on larger Channels clusters
+      value: 70000
+      unit: events per second
+      qualifier: up to; the post gives 60,000-70,000 events per second
+      locator: "Near: larger Channels clusters (60,000-70,000 events/s)"
+source:
+  url: https://pusher.com/blog/migrating-channels-webhooks-from-beanstalkd-to-kinesis-sqs
+  archive_url: null
+  title: Migrating Channels webhooks from Beanstalkd to Kinesis/SQS
+  publisher: Pusher blog
+  author: James Lees
+  published: "2020-08-06"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, datastore-choice]
+    title: Replace self-hosted beanstalkd and a Ruby packager with Kinesis, SQS and a Go consumer before the system gave severe problems
+    chosen:
+      text: "The event stream moved to Kinesis, consumed by a new Go packager service on kinsumer, and the send queue moved to SQS. The publishers and the sender process were changed to match."
+      locator: "Section: Implementation and Testing"
+    rejected:
+      - option: One SQS queue per stream shard
+        reason: "Sharding would still be managed in the EventMachine application layer, and resharding would be awkward because SQS queues are not created on demand and would need terraform."
+        locator: "Near: Resharding would become more awkward since, unlike beanstalkd"
+      - option: Kinesis consumed through the Java Kinesis Client Library from Ruby
+        reason: "The library is Java only, so a Ruby client would need the Java multilang daemon in production, adding operational complexity."
+        locator: "Near: KCL is only available as a Java library"
+    forcing_condition: null
+    rationale:
+      text: "Self-hosting beanstalkd on EC2 needs expertise and replacing machines is fiddly, whereas the team prefers managed services for parts that are not an important part of its value proposition. EventMachine is stagnating, and the shard balancing is simplistic, so a process can occasionally lock more shards than it can handle and need manual rebalancing."
+      locator: "Section: Problems"
+    worked_before:
+      text: "The beanstalkd and EventMachine design mostly worked well, with nice properties such as independent scaling."
+      locator: "Section: Problems"
+    cost_paid:
+      text: "A gradual rollout was impossible, because having multiple processes consume the event stream at the same time can lead to issues, so everything had to switch from the old system to the new at one time."
+      locator: "Section: Migration"
+    outcome:
+      text: "The authors report the new system is functionally extremely similar to the old one but considerably more performant and more reliable, and that the team no longer worries about replacing beanstalkd machines."
+      locator: "Section: Conclusion"
+    applies_from: null
+    curator_notes:
+      - "The post says the issues were not yet severely affecting the platform's stability, so this was a pre-emptive change, considered because moving the existing system to Kubernetes would itself take investment, not a reaction to an outage."
+      - "The Kinesis section gives the reasons for that choice: streams are sharded by default and a Client Library style consumer handles rebalancing and checkpointing, promising automatic lossless resharding and better durability. The team also generally favours Go for new services."
+    aliases:
+      - beanstalkd to kinesis
+      - self hosted queue to managed service
+      - replace eventmachine
+      - webhook pipeline rewrite
+      - sqs versus kinesis for sharded stream
+    tech: [beanstalkd, kinesis, sqs, go]
+  - id: d2
+    kind: decision
+    topics: [deployment-rollout, delivery-idempotency]
+    title: Run the new pipeline alongside the old in production without sending webhooks, then cut over in one configuration change
+    chosen:
+      text: "During a low traffic period the event publishers wrote to both beanstalkd and Kinesis. The new packager read Kinesis and published to SQS, but nothing consumed SQS, so no webhook went out twice. Later senders read both queues, and a single configuration change moved all publishers to Kinesis."
+      locator: "Section: Parallel Publishing"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Most of the issues Channels sees happen at scale, and staging tests looked positive, so the team wanted to see production load on the new service without switching everything over."
+      locator: "Section: Implementation and Testing"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The single configuration change switched all publishers from beanstalkd to Kinesis at once, and the authors describe it as anticlimactic: nobody noticed that anything had changed."
+      locator: "Near: happily anticlimactic and nobody actually noticed that"
+    applies_from: null
+    curator_notes:
+      - "Before the cutover, the parallel run left the team confident that the new service was stable at the necessary scale and debounced and batched webhooks in broadly the same way as the old system; the cluster was then returned to its starting state, not publishing to Kinesis (Section: Parallel Publishing)."
+    aliases:
+      - dual publish to shadow pipeline
+      - test new queue at production scale
+      - cut over in a single config change
+      - shadow consumer that does not send
+    tech: [kinesis, sqs]
+  - id: d3
+    kind: decision
+    topics: [delivery-idempotency, datastore-partitioning]
+    title: Divide the event stream into locked logical shards so that one packager sees all of a channel's events and can debounce them
+    chosen:
+      text: "The event stream is divided into logical shards, each its own beanstalkd queue, and a packager must obtain a lock to consume a shard, so all events for a channel go to the same packager."
+      locator: "Section: Sharding"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Debouncing only works if a channel's events are handled by one packager. Otherwise an event and its cancelling partner could land on different packagers and neither would be dropped."
+      locator: "Section: Sharding"
+    worked_before: null
+    cost_paid:
+      text: "The sharding logic is simplistic: a process can win the lock on more shards than it can process, which rarely causes delayed webhooks and needs manual rebalancing, and adding or removing shards needs fiddly configuration changes."
+      locator: "Section: Problems"
+    outcome: null
+    applies_from: null
+    aliases:
+      - partition events by channel for debouncing
+      - lock per stream shard
+      - debounce leave and rejoin events
+      - shard rebalancing by hand
+    tech: [beanstalkd, eventmachine]

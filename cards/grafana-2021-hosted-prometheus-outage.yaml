@@ -1,0 +1,102 @@
+schema: 1
+id: grafana-2021-hosted-prometheus-outage
+title: A limit-enforcement bug lets one new tenant overload a shared Grafana Cloud metrics cluster, and the failure cascades through the stack
+org: Grafana Labs
+system: Grafana Cloud Hosted Prometheus (Grafana Enterprise Metrics clusters)
+architecture:
+  text: "Grafana Cloud runs about 15 large multi-tenant Grafana Enterprise Metrics clusters on Kubernetes clusters around the world. Tenants share a cluster under per-tenant limits on how much data they can send and how quickly, and the clusters are sized from those limits."
+  locator: "Section: Background"
+as_of: "2021-03"
+evidence: incident
+workloads: [rate-limiting, multi-tenant-data]
+footprint:
+  shape: multi-region
+  locator: "Near: various Kubernetes clusters around the world"
+scale:
+  # The post gives a cluster count and an outage length, but no request rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: large metrics clusters operated
+      value: 15
+      unit: clusters
+      qualifier: about; multi-tenant
+      locator: "Near: run ~15 large clusters of Grafana Enterprise"
+    - axis: other
+      name: duration of the outage in the us-central region
+      value: 2
+      unit: hours
+      qualifier: about
+      locator: "Near: experienced a ~2-hour outage in our Grafana Cloud"
+source:
+  url: https://grafana.com/blog/how-we-responded-to-a-2-hour-outage-in-our-grafana-cloud-hosted-prometheus-service/
+  archive_url: null
+  title: How we responded to a 2-hour outage in our Grafana Cloud Hosted Prometheus service
+  publisher: Grafana Labs blog
+  author: Tom Wilkie
+  published: "2021-03-27"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [tenant-isolation, load-shedding-backpressure]
+    title: A bug in per-tenant limit enforcement let one tenant overload a shared cluster, and error handling made the overload spread
+    trigger:
+      text: "A new customer was onboarded as a tenant on a us-central cluster on March 10, with its active series limits raised to match forecast usage. The next day it sent more data than expected, without the customer realising."
+      locator: "Section: The incident"
+    mechanism:
+      text: "Overload cascaded through the stack because error-handling paths cost more CPU than the success path. The internal authentication gateways became overloaded and failed health checks, so load balancers removed them from the pool. Scaling the cluster up then met waves of load from recovering Prometheus servers, causing out-of-memory errors and other failures throughout the stack."
+      locator: "Section: The incident"
+    why_defences_failed:
+      text: "The limits set for this customer should have protected the cluster, but a bug in how limits were enforced let the tenant overwhelm it."
+      locator: "Section: The incident"
+    impact:
+      text: "Hosted Prometheus in us-central had an outage of about 2 hours on March 11."
+      locator: "Section: How we responded to a 2-hour outage in our Grafana Cloud Hosted Prometheus service"
+    fix:
+      text: "The change in how limits were handled was reverted and deployed. New limits adding multiple layers of protection were still being introduced when the post was written."
+      locator: "Section: What we have learned and are improving"
+    curator_notes:
+      - "During the incident the team identified the tenant, placed even stricter limits on it and kept scaling the cluster until it could handle the recovering load; the cluster then recovered on its own, and service was fully restored by 23:46 UTC on March 11. The underlying bug was fixed on March 12."
+      - "The post lists further work as in progress, not done: tighter, more automated per-tenant limits; more automated cluster scaling; recreating the overload in dev to make the stack fail more predictably (e.g. rejecting API calls instead of crashing); incident response training and automation; and community work on Prometheus replay after an outage. Expected within six weeks."
+    aliases:
+      - one tenant overwhelms shared cluster
+      - per tenant limits bypassed by bug
+      - noisy neighbour in multi tenant metrics
+      - error path costs more than success path
+      - health check failures remove gateways from load balancer
+      - retry waves after recovery cause out of memory
+    tech: [grafana-enterprise-metrics, prometheus, kubernetes]
+  - id: d1
+    kind: decision
+    topics: [tenant-isolation, capacity-cost]
+    title: Share metrics clusters between tenants under per-tenant data and rate limits, and size clusters from those limits
+    chosen:
+      text: "Customers share large multi-tenant clusters, relying on the data and performance isolation features of the software. Limits cap how much data any one tenant can send and how quickly, and clusters are provisioned from those limits among other things."
+      locator: "Section: Background"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The limits are meant to protect other tenants and the whole cluster from being overloaded if a single tenant writes too quickly."
+      locator: "Section: Background"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "In the March 2021 incident a bug in enforcing the limits let a new tenant overwhelm a us-central cluster despite the limits set for it."
+      locator: "Section: The incident"
+    applies_from: null
+    aliases:
+      - per tenant limits
+      - size cluster from tenant limits
+      - shared multi tenant metrics backend
+      - active series limit
+    tech: [grafana-enterprise-metrics]

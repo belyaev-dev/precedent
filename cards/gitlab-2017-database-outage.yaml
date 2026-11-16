@@ -1,0 +1,171 @@
+schema: 1
+id: gitlab-2017-database-outage
+title: GitLab.com's primary database is wiped during a manual replica rebuild, and every backup layer turns out to be broken or missing
+org: GitLab
+system: GitLab.com PostgreSQL database
+architecture:
+  text: "GitLab.com uses a single PostgreSQL primary and a single secondary in hot-standby mode that is used only for failover. One database therefore handles all the load, which the post calls not ideal and a single point of failure."
+  locator: "Section: Database setup"
+as_of: "2017-01"
+evidence: incident
+workloads: [crud-app]
+footprint:
+  shape: single-database
+  locator: "Near: single primary and a single secondary in hot-standby"
+scale:
+  # The post gives no request rate, total database size or team size, so no tier is set.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: data removed from the primary before the command was stopped
+      value: 300
+      unit: GB
+      qualifier: around
+      locator: "Near: 300 GB of data had already been removed"
+    - axis: other
+      name: time GitLab.com was down
+      value: 18
+      unit: hours
+      qualifier: about
+      locator: "Near: GitLab.com was down for about 18 hours"
+    - axis: other
+      name: throughput of the throttled staging disks used for the restore
+      value: 60
+      unit: Mbps
+      qualifier: around
+      locator: "Near: throttled to a really low number (around 60Mbps)"
+source:
+  url: https://about.gitlab.com/blog/postmortem-of-database-outage-of-january-31/
+  archive_url: null
+  title: Postmortem of database outage of January 31
+  publisher: GitLab blog
+  author: GitLab
+  published: "2017-02-10"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [replication-failover, backup-restore]
+    title: Rebuilding a lagging replica by hand ended with the primary's data directory being wiped
+    trigger:
+      text: "A spike in database load, from spam and a background job trying to delete a GitLab employee wrongly flagged for abuse, made replication to the secondary lag. It then failed because the primary had already removed WAL segments the secondary needed, and WAL archiving was not in use."
+      locator: "Section: Timeline"
+    mechanism:
+      text: "Resyncing the secondary by hand means emptying its data directory and running pg_basebackup, which hung silently. Late that night an engineer trying to restore replication wiped the PostgreSQL data directory on the primary instead of the secondary. They stopped it a second or two later, but around 300 GB had been removed."
+      locator: "Section: Timeline"
+    why_defences_failed:
+      text: "The rebuild was manual, not automated and not documented properly. The secondary's data had already been wiped as part of the rebuild, so it could not take over, and no usable backup existed (see f2)."
+      locator: "Section: Root cause analysis"
+    impact:
+      text: "Database changes made between 17:20 and 23:30 UTC on January 31 were lost: at least 5000 projects, 5000 comments and roughly 700 users. Git repositories and wikis, which are stored separately, were not affected."
+      locator: "Section: Data loss impact"
+    fix:
+      text: "Planned: update the shell prompt on all hosts to tell hosts and environments apart more clearly, improve the PostgreSQL replication runbooks, investigate point-in-time recovery and continuous archiving, recover the production replicas, and assign an owner for data durability."
+      locator: "Section: Improving recovery procedures"
+    curator_notes:
+      - "The introduction gives the loss window as 17:20 to 00:00 UTC, and the data-loss section gives 17:20 to 23:30 UTC."
+    aliases:
+      - deleted the wrong servers data directory
+      - rm -rf on the production primary
+      - replica resync mistake
+      - pg basebackup hangs silently
+      - wal segments removed before the secondary replicated
+      - single point of failure database
+    tech: [postgres]
+  - id: f2
+    kind: failure
+    topics: [backup-restore, observability]
+    title: Daily pg_dump backups had been silently failing, and no other backup layer was usable
+    trigger:
+      text: "After the wipe, engineers went to find the pg_dump backups and found the S3 bucket empty, with no recent backup anywhere."
+      locator: "Section: Database backups using pg_dump"
+    mechanism:
+      text: "The backup job ran on an application server, not the database server. The Omnibus package picks the PostgreSQL version from the data directory, which application servers lack, so it used pg_dump 9.2 against a 9.6 database. The major-version mismatch made pg_dump exit with an error."
+      locator: "Section: Database backups using pg_dump"
+    why_defences_failed:
+      text: "Failure emails from the cron job were rejected by the receiving mail server because DMARC was not enabled for them, so nobody saw the failures. Azure disk snapshots were not enabled on the database servers because the other backups were assumed sufficient and restoring such snapshots can take days, and nobody owned testing the backup procedure."
+      locator: "Section: Root cause analysis"
+    impact:
+      text: "GitLab.com was down for about 18 hours, and the restore took over 18 hours, from a copy of the staging database on slower Azure VMs in a different region."
+      locator: "Section: Root cause analysis"
+    fix:
+      text: "LVM snapshots of the production databases are now taken every hour instead of every 24 hours. Azure disk snapshots for them were still being looked into, and the pg_dump backup was suspended while the secondaries were rebuilt."
+      locator: "Section: Improving recovery procedures"
+    curator_notes:
+      - "The post also lists as work in progress: backup monitoring in Prometheus, automated tests that restore PostgreSQL backups, and investigations of pgbarman and WAL-E."
+    aliases:
+      - backups were never tested
+      - backup job failed silently
+      - pg dump version mismatch
+      - alert emails rejected by dmarc
+      - nobody owned backup testing
+      - empty backup bucket
+    tech: [postgres]
+  - id: d1
+    kind: decision
+    topics: [backup-restore, schema-data-migration]
+    title: Restore from a staging copy of the six-hour-old manual snapshot, not the 24-hour-old one
+    chosen:
+      text: "Rebuild production from the staging database, which had been loaded from a manual LVM snapshot taken around 17:20 UTC, about six hours before the outage, by copying over its PostgreSQL data directory. Webhooks were restored from a second database built from the same snapshot, and all database sequences were raised by 100,000 so earlier IDs are not reused."
+      locator: "Section: Recovering GitLab.com"
+    rejected:
+      - option: Use the automatic daily LVM snapshot
+        reason: "It was almost 24 hours old, so almost 24 hours of data would have been lost."
+        locator: "Near: lose almost 24 hours of data"
+      - option: Copy over the LVM snapshot instead of the PostgreSQL data directory
+        reason: "The amount of data to copy was roughly the same either way, and copying over and restoring the data directory was easier."
+        locator: "Near: copying over and restoring the data directory"
+    forcing_condition: null
+    rationale:
+      text: "It was the only option to reduce data loss as much as possible. The LVM snapshots exist mainly to copy production data to staging and are not really meant for disaster recovery."
+      locator: "Section: Recovering GitLab.com"
+    worked_before: null
+    cost_paid:
+      text: "Staging used slow Azure disks without Premium Storage, to save cost. The disks were throttled to around 60 Mbps, so copying the data to production took around 18 hours."
+      locator: "Section: Recovering GitLab.com"
+    outcome:
+      text: "The database was restored to its state at 17:20 UTC on January 31, without webhooks, by 17:00 UTC on February 1. Restoring the webhooks and final checks were done around 18:00 UTC."
+      locator: "Section: Recovering GitLab.com"
+    applies_from: null
+    aliases:
+      - restore from staging copy
+      - lvm snapshot as disaster recovery
+      - restore from slow disks
+      - bump sequences after restore
+    tech: [postgres, lvm]
+  - id: d2
+    kind: decision
+    topics: [backup-restore, deployment-rollout]
+    title: Spend the effort on recoverability and on making the host obvious, not on blocking dangerous commands
+    chosen:
+      text: "The main focus is improving disaster recovery and making it more obvious which host an engineer is on, for example prompts that tell hosts and environments apart, rather than preventing production engineers from running certain commands."
+      locator: "Section: Improving recovery procedures"
+    rejected:
+      - option: Restrict production engineers from running certain commands
+        reason: "Aliasing rm to something safer only protects the person who set it up against one mistake, not against disk corruption or the many other ways to lose data."
+        locator: "Near: One could alias rm to something safer"
+    forcing_condition: null
+    rationale:
+      text: "An ideal environment is one where engineers can make mistakes but recover from them easily and quickly with minimal impact. That requires performing recovery procedures regularly and making changes easy to test and roll back."
+      locator: "Section: Improving recovery procedures"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "The post presents this as a direction for work under way. Only the hourly LVM snapshots are described as already done."
+    aliases:
+      - make mistakes recoverable
+      - do not rely on guardrails alone
+      - test recovery regularly
+      - clearer prompt per host
+    tech: [postgres]

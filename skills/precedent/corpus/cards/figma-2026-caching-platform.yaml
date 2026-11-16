@@ -1,0 +1,199 @@
+schema: 1
+id: figma-2026-caching-platform
+title: Figma puts a stateless in-house Redis proxy and first-party clients in front of ElastiCache to stop connection pressure and thundering herds
+org: Figma
+system: FigCache, the Redis caching and ephemeral data platform
+architecture:
+  text: "FigCache is a stateless, RESP-wire-protocol proxy service backed by a fleet of Redis clusters on AWS ElastiCache, complemented by first-party client libraries. It multiplexes commands from far more client connections onto a finite number of outbound connections to Redis."
+  locator: "Section: FigCache, our in-house caching service and client ecosystem"
+components:
+  - name: FigCache proxy service
+    role: "A stateless, highly available, horizontally scalable service that proxies client connections to ElastiCache Redis clusters. It is split into a frontend layer for client interaction and a backend layer for command processing and connection multiplexing to storage."
+    tech: redis
+    locator: "Section: FigCache, our in-house caching service and client ecosystem"
+  - name: ResPC frontend framework
+    role: "A Go library for building RPC servers over RESP. It holds the server layer, a streaming RESP parser, a schema-driven command parser and a command dispatch layer, and it is the entry point to FigCache's command processing."
+    tech: go
+    locator: "Section: A native, drop-in replacement"
+  - name: Engine tree
+    role: "The backend is a dynamically assembled tree of engine nodes. Leaf data engines run commands against Redis, and intermediate filter engines route, block or modify commands first. The tree is a Starlark program rendered to Protobuf configuration."
+    tech: starlark
+    locator: "Section: Configuration-driven, dynamic engines"
+  - name: Fanout filter engine
+    role: "Intercepts eligible multi-shard read-only pipelines and runs them as a parallel scatter-gather, so they do not surface to clients as CROSSSLOT errors."
+    locator: "Section: Configuration-driven, dynamic engines"
+  - name: First-party client libraries
+    role: "Opinionated Go, Ruby and TypeScript clients, built as wrappers over the open source Redis clients already in use, giving a baseline feature set and consistent client-side observability."
+    tech: redis
+    locator: "Section: An opportunity for new foundational technologies"
+  - name: ElastiCache Redis clusters
+    role: "The storage backends: a fleet of Redis clusters on AWS ElastiCache to which the stateless proxy forwards connections."
+    tech: elasticache
+    locator: "Section: FigCache, our in-house caching service and client ecosystem"
+as_of: "2026-03"
+evidence: production
+workloads: [read-cache]
+footprint:
+  shape: partitioned
+  locator: "Near: Figma's Redis footprint spans many clusters with"
+scale:
+  # The post gives no request rate, data size, node count or team size, and its reliability and
+  # connection figures are in words ("six nines", "an order of magnitude").
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://www.figma.com/blog/figmas-next-generation-data-caching-platform/
+  archive_url: null
+  title: "Figma's next-generation data caching platform"
+  publisher: Figma blog
+  author: Kevin Lin
+  published: "2026-03-25"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [caching, dependency-failure]
+    title: Put a connection-multiplexing Redis proxy and first-party clients in front of the Redis clusters
+    chosen:
+      text: "A stateless proxy service sits between applications and the Redis clusters as a unified data plane. It acts as a connection multiplexer, so the connection volume Redis sees no longer follows the size of client fleets, and first-party Go, Ruby and TypeScript clients replace direct use of open source clients."
+      locator: "Section: An opportunity for new foundational technologies"
+    rejected:
+      - option: A proprietary protocol or a new client technology for applications
+        reason: "Wrapping the existing open source clients avoided the significant extra complexity of creating a proprietary protocol or migrating to a new client technology."
+        locator: "Near: significant additional complexity in creating a proprietary"
+    forcing_condition:
+      text: "Redis clusters faced growing connection volumes that were slowly approaching hard limits, and rapid scale-ups of client services could trigger thundering herds of new connections that bottlenecked I/O and degraded availability."
+      locator: "Section: Growing pains in caching"
+    rationale:
+      text: "Goals over a multi-year horizon: isolate Redis from client connection volatility, give consistent observability in a multitenant environment, hide Redis Cluster topology changes from clients, put many clusters behind one endpoint, and allow other storage backends later."
+      locator: "Section: Designing for longevity"
+    worked_before:
+      text: "Removing Redis dependencies from core API subsystems and service-specific client-side connection pooling both isolated Redis outages from top-level site availability. The team wanted a more strategic solution."
+      locator: "Section: Growing pains in caching"
+    cost_paid:
+      text: "A proxy tier necessarily adds latency through extra critical-path network hops and layers of I/O. Moving all applications to the first-party client wrappers was an upfront engineering cost."
+      locator: "Section: The big migration"
+    outcome:
+      text: "After rollout for all Redis traffic from the main API service, connection counts on Redis clusters dropped by an order of magnitude across the board and became significantly less volatile despite an unchanged diurnal traffic pattern."
+      locator: "Section: Infrastructure scalability"
+    applies_from: null
+    curator_notes:
+      - "Authors' claims, with no baselines given: six nines of uptime since the main API rollout in the second half of 2025, zero-downtime node failovers and cluster scaling, an entire class of thundering-herd risk eliminated, and incident diagnosis cut from hours or days to minutes."
+    aliases:
+      - redis connection multiplexer
+      - proxy in front of redis cluster
+      - thundering herd of new connections
+      - redis connection limits
+    tech: [redis, elasticache, go]
+  - id: d2
+    kind: decision
+    topics: [service-boundaries, datastore-choice]
+    title: Build the Redis proxy in-house instead of adopting or forking an open source one
+    chosen:
+      text: "Figma built its own proxy in-house, with an RPC layer able to extract full, annotated arguments from inbound Redis commands, so it can enforce runtime guardrails, define custom commands the proxy itself intercepts and runs, and shim the quirks of existing clients, such as a Redis Cluster mode emulation layer that presents the proxy to cluster-aware clients as a fake cluster."
+      locator: "Section: Why we built instead of bought"
+    rejected:
+      - option: Adopt an existing open source Redis proxy
+        reason: "Existing solutions shipped with rudimentary RPC servers that could not extract full, annotated arguments from arbitrary Redis commands, which limited generic runtime guardrails and custom commands run by the proxy."
+        locator: "Near: Existing solutions shipped with rudimentary RPC servers"
+      - option: Extend an open source proxy with custom business logic
+        reason: "It proved heavyweight and logistically brittle, and would need a source code fork that would be hard to keep in sync with upstream."
+        locator: "Near: requiring maintenance of a source code fork"
+    forcing_condition: null
+    rationale:
+      text: "Figma wanted protocol extras in one place, not duplicated in each client: a multi-cluster locking abstraction over Redlock and graceful connection draining for frequent deploys. Its clients had mixed Redis Cluster awareness and TLS settings, which a proprietary proxy could absorb, making migrations significantly easier and less risky in the authors' view."
+      locator: "Section: Why we built instead of bought"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "In 2025 FigCache was delivered for multiple critical Figma services with no disruption to availability or functionality."
+      locator: "Section: What we unlocked"
+    applies_from: null
+    curator_notes:
+      - "The drop-in replacement section says that in the simplest case, moving an application to FigCache was a one-line endpoint configuration change. The build-versus-buy section says the client shims made migrations significantly easier and less risky; that is the authors' own assessment."
+    aliases:
+      - build versus buy for a proxy
+      - why not an open source redis proxy
+      - custom redis proxy
+      - redis cluster mode emulation
+      - proxy with custom commands
+    tech: [redis, go]
+  - id: d3
+    kind: decision
+    topics: [deployment-rollout, dependency-failure]
+    title: Migrate services to the proxy case by case, in slices, with a runtime switch to revert
+    chosen:
+      text: "Services were opted in to FigCache case by case. Large workloads such as the main API service shifted traffic incrementally across multiple independent domains, and changes could be reverted at runtime with feature flags."
+      locator: "Section: The big migration"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "An all-or-nothing approach was unacceptable for the biggest workloads, and in an emergency the team needed to revert live traffic quickly without code changes or binary deployments. It also wanted correctness confidence early, from integration tests and live synthetic load."
+      locator: "Section: The big migration"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "In 2025 FigCache was delivered for multiple critical Figma services with no disruption to availability or functionality."
+      locator: "Section: What we unlocked"
+    applies_from: null
+    curator_notes:
+      - "The three-phase delivery strategy in the post's earlier section first moved all services to the first-party clients without changing the endpoints they connect to, then built the proxy, then migrated applications to it. The introduction dates the main API service rollout to the second half of 2025, and a later section says it covered 100% of that service's Redis traffic."
+    aliases:
+      - gradual rollout behind feature flags
+      - reversible migration at runtime
+      - opt in services case by case
+      - migrate clients before the proxy
+    tech: [redis]
+  - id: d4
+    kind: decision
+    topics: [capacity-cost, observability]
+    title: Bound the proxy's latency cost with zone-aware routing, weekly production stress tests and per-pull-request benchmarks
+    chosen:
+      text: "Routing-level configuration probabilistically prefers keeping traffic in the same availability zone across clients, load balancers and proxy instances. A distributed stress test runs weekly on production at an order of magnitude above the typical organic peak, and on every pull request CI profiles hot code paths and checks synthetic benchmarks against a golden performance baseline."
+      locator: "Section: The big migration"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Adding a proxy tier adds critical-path network hops, which the team feared could be a show-stopping blocker. A hop between availability zones can cost as much as a few milliseconds, and zonal colocation makes that penalty more stable and predictable."
+      locator: "Section: The big migration"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - proxy latency overhead
+      - zonal traffic colocation
+      - weekly production load test
+      - performance regression gate in ci
+    tech: [redis]
+  - id: d5
+    kind: decision
+    topics: [deployment-rollout, service-boundaries]
+    title: Express the proxy's routing and filtering as a Starlark configuration program over a tree of engines
+    chosen:
+      text: "The backend is a tree of engine nodes. Data engines run commands against Redis, and filter engines route, block or modify commands first. The whole tree is written as a Starlark program, evaluated at runtime, that produces a Protobuf configuration the backend consumes."
+      locator: "Section: Configuration-driven, dynamic engines"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Operators can express complex runtime behaviour, such as splitting by command type, routing or rejecting by key prefix, and proxying to different Redis clusters, purely in configuration, without heavyweight changes to core logic or deploying new server binaries."
+      locator: "Section: Configuration-driven, dynamic engines"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - routing rules as config
+      - key prefix routing
+      - composable command filters
+      - config as code for a proxy
+    tech: [starlark, go]
