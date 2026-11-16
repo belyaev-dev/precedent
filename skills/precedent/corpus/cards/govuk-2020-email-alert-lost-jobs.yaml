@@ -1,0 +1,104 @@
+schema: 1
+id: govuk-2020-email-alert-lost-jobs
+title: GOV.UK builds its own recovery worker for lost Sidekiq email jobs instead of buying Sidekiq Pro, and makes the work idempotent
+org: GOV.UK
+system: Email Alert API background processing
+architecture:
+  text: "Email Alert API uses Sidekiq, with jobs held in Redis, for background work including generating and sending email. Jobs can be lost when enqueueing fails or when a worker is killed while processing."
+  locator: "Section: Context"
+as_of: "2020-12"
+evidence: production
+workloads: [job-queue]
+footprint: null
+scale:
+  # The ADR gives no job rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: worst-case delay to recover a lost job
+      value: 1.5
+      unit: hours
+      qualifier: up to; the post's own worst case
+      locator: "Near: could take up to 1.5 hours to recover"
+    - axis: other
+      name: target time to send transactional emails
+      value: 15
+      unit: minutes
+      qualifier: within; the post's example of a tighter target
+      locator: "Near: which should be sent within 15 minutes"
+source:
+  url: https://docs.publishing.service.gov.uk/repos/email-alert-api/adr/adr-009-sidekiq-lost-job-recovery.html
+  archive_url: null
+  title: "email-alert-api: 9. Sidekiq Lost Job Recovery"
+  publisher: GOV.UK developer docs
+  published: "2020-12-02"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, delivery-idempotency]
+    title: Recover lost email jobs with an infrequent sweeper worker instead of buying Sidekiq Pro
+    chosen:
+      text: "A new worker automatically recovers all work to do with generating and sending email, running every half hour on work more than an hour old. A separate check for lost daily and weekly digest runs looks back over the previous week for missing DigestRun records."
+      locator: "Section: Decision"
+    rejected:
+      - option: Sidekiq Pro, which persists jobs in Redis while they are processed
+        reason: "It would prevent losses from a killed worker but not failures when enqueueing, which are unrelated to Sidekiq; it was thought hard to use in practice, and paying for and integrating it was expected to take longer than writing the recovery worker."
+        locator: "Section: Decision"
+    forcing_condition:
+      text: "Workers were frequently forcibly restarted for using too much memory, losing jobs they were processing. One lost Travel Advice content change was caught by the travel advice email alert and led to an incident."
+      locator: "Section: Context"
+    rationale:
+      text: "There is little urgency about sending email, so recovery can run infrequently. The team also expected its own worker to be quicker to deliver than acquiring Sidekiq Pro."
+      locator: "Section: Decision"
+    worked_before:
+      text: "Support engineers recovered lost content change and message jobs by hand, checking the database for signs of loss. This could give false positives if the system was slow, so both of those workers double-checked to avoid duplicating work."
+      locator: "Section: Context"
+    cost_paid:
+      text: "In the worst case recovering a lost piece of work could take up to 1.5 hours. The authors name transactional emails, which should go out within 15 minutes, as a case where this might need tuning."
+      locator: "Section: Delay in processing lost work"
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "This is an architecture decision record with status Accepted, written at decision time, so it reports no outcome. Its page warns that it has not been updated for a while and may be out of date."
+    aliases:
+      - lost sidekiq jobs
+      - jobs lost when worker killed for memory
+      - sweeper job to requeue lost work
+      - sidekiq pro versus own recovery
+      - recover jobs from database state
+    tech: [sidekiq, redis]
+  - id: d2
+    kind: decision
+    topics: [delivery-idempotency, async-processing]
+    title: Make each worker idempotent with advisory locks for slow jobs and row locks for fast email jobs
+    chosen:
+      text: "Each worker was made idempotent. Slow jobs such as processing a content change take a non-blocking advisory lock, so wrongly recovered work becomes a quick no-op. Fast, high-volume jobs such as sending an email take a blocking row-level lock inside a transaction."
+      locator: "Section: Potential for duplicate work"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Recovery can falsely requeue work that is only delayed, for example behind a long queue, or is still running. A row lock is faster because it is part of the SELECT already used to fetch the email record, which suits the common no-duplicate case."
+      locator: "Section: Potential for duplicate work"
+    worked_before: null
+    cost_paid:
+      text: "In the short term recovery may create an alarming amount of no-op work, notably for email, where queue latency can exceed an hour with many thousands of fresh jobs. SidekiqUniqueJobs is used to stop that snowballing."
+      locator: "Section: Potential for duplicate work"
+    outcome: null
+    applies_from: null
+    aliases:
+      - idempotent workers
+      - duplicate jobs after recovery
+      - advisory lock versus row lock
+      - select for update to dedupe
+      - unique jobs to stop requeue storm
+    tech: [sidekiq, sidekiq-unique-jobs]

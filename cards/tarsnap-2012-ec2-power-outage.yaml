@@ -1,0 +1,124 @@
+schema: 1
+id: tarsnap-2012-ec2-power-outage
+title: A power loss in EC2 corrupts Tarsnap's server disk, and rebuilding state from S3 takes nearly 44 hours
+org: Tarsnap
+system: Tarsnap central server and S3-backed storage
+architecture:
+  text: "Tarsnap stores all user data in Amazon S3 and keeps only metadata cached on its central server in EC2. The design is meant to survive the loss of everything held on EC2: the data is read back from S3 and the full operation log is replayed."
+  locator: "Section: Tarsnap outage"
+as_of: "2012-06"
+evidence: incident
+workloads: [blob-pipeline]
+# Single-node would mean the application and its data on one machine; here all user data is in S3,
+# so the source supports no single footprint value.
+footprint: null
+scale:
+  # The post gives no request rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: time from outage start to full recovery
+      value: 44
+      unit: hours
+      qualifier: slightly less than; from 2012-06-30 03:02 UTC to 2012-07-01 22:50 UTC
+      locator: "Near: slightly less than 44 hours after the"
+source:
+  url: https://www.daemonology.net/blog/2012-07-04-tarsnap-outage.html
+  archive_url: null
+  title: Tarsnap outage
+  publisher: Daemonic Dispatches (Colin Percival's blog)
+  author: Colin Percival
+  published: "2012-07-04"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [backup-restore, dependency-failure]
+    title: An EC2 power loss corrupted the metadata disk, and a full rebuild from S3 ran slowly through recovery code only ever tested on small data
+    trigger:
+      text: "At about 03:02 UTC on June 30, 2012 the central server went offline in a power outage in Amazon's EC2 US-East region. Amazon's post-mortem blamed two generator banks that failed to give stable voltage after grid power was lost in a storm."
+      locator: "Section: Tarsnap outage"
+    mechanism:
+      text: "When power returned about an hour later the filesystem was corrupted. The author could not rule out damage to the cached metadata, so he rebuilt all server state from S3: reading millions of objects, rebuilding the map of block locations, then replaying logs. The last phase failed once because one code path had no retry on S3 timeouts."
+      locator: "Section: Timeline of events"
+    why_defences_failed:
+      text: "The recovery process had only ever been tested on a data set six orders of magnitude smaller, so its speed was never exercised. The author also names sequential S3 reads, reliance on the AWS Management Console and normal-mode I/O limits as things that slowed recovery."
+      locator: "Section: Lessons learned"
+    impact:
+      text: "The service was fully operational again at 22:50 UTC on July 1, slightly less than 44 hours after the outage started. The author credited affected users with 50% of a month of storage costs."
+      locator: "Section: Tarsnap outage"
+    fix:
+      text: "Planned: the author lists lessons he says should speed future recoveries: test disaster recovery at scale, avoid relying on the AWS Management Console, start recovery at the first sign of an outage, avoid sequential S3 access, and make shared code behave differently in recovery mode."
+      locator: "Section: Lessons learned"
+    curator_notes:
+      - "The post reports lessons, not completed changes, so the fix field is marked as planned."
+    aliases:
+      - disaster recovery took too long
+      - rebuild state from s3
+      - sequential s3 reads slow
+      - ec2 power outage
+      - untested restore at scale
+      - recovery rate limits left on
+    tech: [ec2, s3, ebs]
+  - id: d1
+    kind: decision
+    topics: [backup-restore, datastore-choice]
+    title: Keep all user data in S3 and only cached metadata on the EC2 server so that all server state can be rebuilt
+    chosen:
+      text: "User data lives in S3 and the EC2 server keeps only cached metadata, so losing everything on EC2 is survivable by reading data back from S3 and replaying the operation log."
+      locator: "Section: Tarsnap outage"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The author treats S3 as an off-site backup, since Amazon replicates it across several datacenters."
+      locator: "Section: Tarsnap outage"
+    worked_before: null
+    cost_paid:
+      text: "Recovering entirely from S3 is a worst-case scenario, and in this outage it was slow."
+      locator: "Section: Tarsnap outage"
+    outcome:
+      text: "The full rebuild from S3 worked: the service was fully operational at 22:50 UTC on July 1, slightly less than 44 hours after the outage began, which the author calls unacceptable."
+      locator: "Section: Tarsnap outage"
+    applies_from: null
+    aliases:
+      - metadata cache with durable object store
+      - rebuild from object storage
+      - replay operation log
+      - stateless server recovery
+    tech: [s3, ec2]
+  - id: d2
+    kind: decision
+    topics: [backup-restore]
+    title: Treat the corrupted local state as untrustworthy and rebuild it all from S3 instead of trusting it
+    chosen:
+      text: "After the power loss, the author treated the state on EC2 as untrustworthy and rebuilt it fully from S3, though he saw no evidence the cached metadata was corrupted."
+      locator: "Section: Tarsnap outage"
+    rejected:
+      - option: Trust the existing local state and restart on it
+        reason: "He could not exclude corruption with certainty, and he holds that a backup service must above all never risk losing or corrupting data."
+        locator: "Section: Tarsnap outage"
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid:
+      text: "The outage lasted far longer than it should have, which the author calls unacceptable."
+      locator: "Section: Tarsnap outage"
+    outcome:
+      text: "At 15:00 UTC on June 30 he judged the damage almost certainly limited to archives committed in the last few seconds before the power loss, and brought the old server back read-only so users could retrieve data urgently."
+      locator: "Section: Timeline of events"
+    applies_from: null
+    aliases:
+      - distrust state after crash
+      - full rebuild after filesystem corruption
+      - read only mode during recovery
+      - backup system caution
+    tech: [s3, ec2]

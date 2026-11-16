@@ -1,0 +1,126 @@
+schema: 1
+id: 37signals-2023-datacenter-overview
+title: 37signals serves Basecamp and HEY from about 90 servers in each of two provider-run datacenters
+org: 37signals
+system: Basecamp, HEY and heritage apps hosting
+architecture:
+  text: "37signals serves its apps, which have millions of users every day, from two datacenters, one in Ashburn, Virginia and one in Chicago. Both facilities are run by Deft, a provider the company has used for more than a decade."
+  locator: "Section: Our datacenters"
+components:
+  - name: Ashburn and Chicago datacenters
+    role: "The two sites that serve every app, including Basecamp, HEY and the older heritage apps, run for 37signals by a hosting provider rather than by the company itself."
+    locator: "Section: Our datacenters"
+  - name: Server footprint
+    role: "Four 48-unit cabinets per site hold a mix of single and double rack unit Dell servers, 20-25 per cabinet and about 90 per site, on 40kw of power per site."
+    locator: "Section: Our carbon-neutral physical footprint"
+  - name: Network
+    role: "Redundant at each layer so any single link or device can fail, using EVPN/VXLAN internally, with external connections to the internet, the other datacenter and AWS over different providers and physical paths."
+    locator: "Section: Networking"
+  - name: BGP Anycast routing
+    role: "Basecamp 4 and the marketing sites run in both datacenters at once, and visitors reach whichever site is fastest for them."
+    locator: "Section: Performance and redundancy"
+  - name: Active and standby sites
+    role: "The other critical apps run in both datacenters in an active and standby arrangement, so an app can be moved over to the other datacenter if catastrophe strikes."
+    locator: "Section: Performance and redundancy"
+as_of: "2023-08"
+evidence: production
+workloads: [crud-app]
+footprint:
+  shape: multi-region
+  locator: "Near: datacenter in Ashburn, VA and one in Chicago"
+scale:
+  # The post gives hardware and power figures, but no request rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: servers per datacenter
+      value: 90
+      unit: servers
+      qualifier: about; at each of the two sites
+      locator: "Near: about 90 servers in each site"
+    - axis: other
+      name: cabinets per datacenter
+      value: 4
+      unit: cabinets
+      qualifier: each 48 rack units tall; at each site
+      locator: "Near: We have four cabinets in both datacenters"
+    - axis: other
+      name: power per datacenter
+      value: 40
+      unit: kW
+      qualifier: split among the four cabinets at each site
+      locator: "Near: Deft provides us 40kw of power split"
+source:
+  url: https://dev.37signals.com/37signals-datacenter-overview/
+  archive_url: null
+  title: 37signals datacenter overview
+  publisher: 37signals Dev blog
+  author: Eron Nicholson
+  published: "2023-08-10"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [deployment-rollout, capacity-cost]
+    title: Rebuild both sites as identical footprints on a new network and move every server in about six months
+    chosen:
+      text: "Working with the hosting provider, 37signals designed and built an identical, future-proofed footprint with a modern network in each site, then moved every server between buildings in Ashburn and between rooms in Chicago."
+      locator: "Section: A bit of history"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The Chicago cabinets had become increasingly difficult to work with: relatively low power, two older generations of network gear and over 10 years of accumulated wiring. The Virginia provider was moved away from for a variety of reasons the post does not list."
+      locator: "Section: A bit of history"
+    worked_before:
+      text: "A Chicago site from 2010 and a second site in Virginia from 2012 with another provider served the apps until the move."
+      locator: "Section: A bit of history"
+    cost_paid:
+      text: "The author calls the move quite the undertaking."
+      locator: "Section: A bit of history"
+    outcome:
+      text: "The moves took about six months and caused no customer impact."
+      locator: "Section: A bit of history"
+    applies_from: null
+    curator_notes:
+      - "The post says the move off the cloud is finished but gives no reason for it. This card covers only the datacenter footprint it describes."
+    aliases:
+      - colocation instead of cloud
+      - identical sites
+      - migrate servers between datacenters with no downtime
+      - rebuild network in datacenter
+    tech: [evpn-vxlan]
+  - id: d2
+    kind: decision
+    topics: [replication-failover, deployment-rollout]
+    title: Run Basecamp 4 active in both datacenters with BGP Anycast and keep other apps active and standby
+    chosen:
+      text: "Basecamp 4 and the marketing sites run in both datacenters and visitors are routed by BGP Anycast to whichever site is fastest. The other critical apps run in both sites as active and standby, with the option of moving an app over to the other datacenter if catastrophe strikes."
+      locator: "Section: Performance and redundancy"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "With Anycast people use whichever site is fastest for them."
+      locator: "Section: Performance and redundancy"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The author reports using BGP Anycast for Basecamp since writing about it in 2015."
+      locator: "Section: Performance and redundancy"
+    applies_from: null
+    curator_notes:
+      - "The post says HEY will be converted to run actively in both datacenters later in 2023. That is a plan, not a result."
+    aliases:
+      - bgp anycast active active
+      - two datacenters active standby
+      - route users to fastest site
+      - failover between datacenters
+    tech: [bgp]
