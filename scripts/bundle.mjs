@@ -22,6 +22,7 @@ const LETTER = { traffic: "T", data: "D", team: "O" };
 const cell = (text) => text.replaceAll("|", "\\|");
 const tier = (axis) => (axis ? String(axis.tier) : "?");
 const rows = [];
+const systems = [];
 const withdrawn = [];
 for (const [name, text] of sources) {
   const card = parse(text);
@@ -31,6 +32,7 @@ for (const [name, text] of sources) {
   }
   const scale = `T${tier(card.scale.traffic)} D${tier(card.scale.data)} O${tier(card.scale.team)}`;
   const shape = card.footprint?.shape ?? "-";
+  systems.push(`| \`${card.id}\` | ${cell(card.org)}: ${cell(card.system)} | ${card.as_of ?? "undated"} | ${scale} | ${shape} | ${card.workloads.join(", ")} | ${cell(card.architecture.text)} |`);
   for (const record of card.records) {
     const floor = Object.entries(LETTER)
       .filter(([axis]) => record.applies_from?.[`${axis}_tier`] !== undefined)
@@ -54,9 +56,15 @@ Corpus version: \`${version}\` (${rows.length} records from ${files.length - wit
 
 Scale is the system's tier on three axes: T traffic, D data, O team (operators). \`?\` means the source gives no usable figure; such records have unknown scale and never count as a match for your tier. Shape is the deployed footprint the source states (single-node, single-database, partitioned, multi-region), which is often the only size signal a small system gives. Floor is the advisory minimum tier for copying a decision, where one exists. Tier definitions are in SKILL.md.
 
-Records are grouped by the card's first workload. Open \`cards/<card id>.yaml\` for the full record before citing it.
+The first table lists the systems, one per card: use it to find examples of how a kind of system is built and to pick a baseline. The tables after it list the decision and failure records, grouped by the card's first workload. Open \`cards/<card id>.yaml\` for the full card before citing anything from it.
 
-${sections.join("\n\n") || "_No cards yet._"}
+## Systems
+
+| Card | System | As of | Scale | Shape | Workloads | Architecture |
+|---|---|---|---|---|---|---|
+${systems.join("\n") || "_No cards yet._"}
+
+${sections.join("\n\n")}
 ${withdrawn.length ? `\n## Withdrawn\n\nThese ids no longer carry evidence. Do not cite them.\n\n${withdrawn.join("\n")}\n` : ""}`;
 
 const expected = new Map([["INDEX.md", index], ...[...sources].map(([n, t]) => [`cards/${n}`, t])]);

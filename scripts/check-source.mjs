@@ -49,6 +49,10 @@ function checkFact(fact, where) {
 
 checkFact(card.architecture, "architecture");
 if (card.footprint) checkLocator(card.footprint.locator, "footprint");
+for (const component of card.components ?? []) {
+  checkText(component.role, `component "${component.name}"`);
+  checkLocator(component.locator, `component "${component.name}"`);
+}
 for (const metric of card.scale?.metrics ?? []) {
   if (!hasNumber(metric.value)) problems.push(`metric "${metric.name}": value ${metric.value} not found in source`);
   checkLocator(metric.locator, `metric "${metric.name}"`);

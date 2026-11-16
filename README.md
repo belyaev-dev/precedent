@@ -8,7 +8,7 @@ It exists because agents design from memory, and memory produces the interview a
 
 ## How it is organised
 
-A **card** is one YAML file in [`cards/`](cards/). It describes one system at one point in time, as reported by one public source. A source that covers several periods or scales becomes one card per period. Each card holds up to eight **records**, and the record is what an agent retrieves and cites:
+A **card** is one YAML file in [`cards/`](cards/). It describes one system at one point in time, as reported by one public source: its overall architecture, and optionally its main components and what each is for. A source that covers several periods or scales becomes one card per period. Each card holds up to eight **records**, and the record is what an agent retrieves and cites:
 
 - A **decision** record: what was chosen, what was rejected, the measured pain that forced the choice, any other reason the source gives, the simpler setup that worked before, the cost paid, and the outcome.
 - A **failure** record: the trigger, the mechanism that turned it into an outage, why the defences did not hold, the impact, and the fix.
@@ -66,11 +66,11 @@ The skill ships with a copy of the cards so it works with no server.
 
 ## Sources
 
-Primary sources only: engineering posts by the organisation that runs the system, operators' own post-mortems, peer-reviewed systems papers, and independent test reports. Link lists such as `danluu/post-mortems` and `awesome-scalability` are used to find sources, not as sources. Interview-preparation material, secondary summaries, and vendor reference architectures are out of scope for now.
+Primary sources only: accounts by the organisation that runs the system of how it is built, why it changed, or how it failed, plus peer-reviewed systems papers and independent test reports. A plain "here is our architecture" post is as welcome as a migration story or a post-mortem; the corpus is meant to hold examples of real production systems, not only their turning points. Link lists such as `danluu/post-mortems` and `awesome-scalability` are used to find sources, not as sources. Interview-preparation material, secondary summaries, and vendor reference architectures are out of scope for now.
 
 A card restates facts in our own words and stores none of the source's expression. A source is not used at all when its publisher has said it does not want that: a no-derivatives licence, terms that forbid summarising or reuse, an explicit reservation of rights against AI use of the content, or a direct request. Where a card does lean on a source's licence, that licence must allow republishing an adaptation under CC BY 4.0, which share-alike and non-commercial licences do not.
 
-A site whose `robots.txt` blocks AI crawlers is never fetched by this project's tooling. A person may still read such a post in their own browser and write a card from it by hand, like any other reader. [`scripts/fetch-source.mjs`](scripts/fetch-source.mjs) enforces the first half: it identifies itself honestly and refuses when `robots.txt` disallows it or the common AI crawlers. Fetched text is kept outside the repository and is never committed.
+This project's tooling fetches one page at a time, on a person's instruction, to summarise it with attribution. It never fetches a page when the site's `robots.txt` disallows all crawlers, disallows this tool by name, or disallows the agents that AI assistants use to fetch a page for a user (`Claude-User`, `ChatGPT-User` and the like). A rule aimed only at training-data crawlers such as `GPTBot` or `ClaudeBot` is not treated as a refusal, because cards are not training data and nothing is collected in bulk. A person may still read a refused post in their own browser and write a card from it by hand. [`scripts/fetch-source.mjs`](scripts/fetch-source.mjs) enforces this: it identifies itself honestly, and a block is never worked around with another user agent or a stealth browser. Fetched text is kept outside the repository and is never committed.
 
 Each card records when its facts were true, when the source was published, when it was retrieved, and who reviewed it, or that review is still pending.
 

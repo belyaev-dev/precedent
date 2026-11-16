@@ -658,6 +658,40 @@
           "description": "One or two sentences on the overall shape of the system at as_of, so a record served on its own has context.",
           "$ref": "#/$defs/fact"
         },
+        "components": {
+          "description": "The main parts of the system and what each is for, as the source describes them. Optional; most useful on cards drawn from an architecture overview. List the parts the source presents, not every technology it mentions. Served with the card so that a reader sees roles, never a bare list of technologies.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 10,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "role",
+              "locator"
+            ],
+            "properties": {
+              "name": {
+                "description": "What the source calls it.",
+                "$ref": "#/$defs/line"
+              },
+              "role": {
+                "description": "What it does in this system, in our own words.",
+                "$ref": "#/$defs/text"
+              },
+              "tech": {
+                "description": "The technology it is built on, as a filter tag, when the source names one.",
+                "type": "string",
+                "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+                "maxLength": 40
+              },
+              "locator": {
+                "$ref": "#/$defs/locator"
+              }
+            }
+          }
+        },
         "as_of": {
           "description": "When the reported facts were true (YYYY or YYYY-MM), not when the source was published. null when the source does not say. One card has one as_of and one scale: when a source covers several periods or scales, write one card per period, sharing the source URL.",
           "type": [

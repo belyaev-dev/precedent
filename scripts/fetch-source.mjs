@@ -6,8 +6,10 @@ import { dirname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const USER_AGENT = "precedent-ingest";
-// A site that disallows any of these has said it does not want AI tooling fetching it.
-const AGENTS = ["precedent-ingest", "claudebot", "claude-user", "anthropic-ai", "gptbot", "chatgpt-user", "google-extended", "ccbot", "perplexitybot"];
+// Agents that fetch one page because a person asked for it. A site that disallows these (or us by name,
+// or every crawler) has said it does not want this kind of fetch. Rules for training-data crawlers such as
+// ClaudeBot and GPTBot are a different request, about bulk collection for model training, and are not ours to claim.
+const AGENTS = ["precedent-ingest", "claude-user", "chatgpt-user", "perplexity-user"];
 
 const [url, out] = process.argv.slice(2);
 if (!url || !out) {
