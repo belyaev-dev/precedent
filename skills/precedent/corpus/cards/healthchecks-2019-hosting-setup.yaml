@@ -1,0 +1,179 @@
+schema: 1
+id: healthchecks-2019-hosting-setup
+title: One person runs Healthchecks.io on Hetzner bare-metal servers, one role per machine, with no containers or autoscaling
+org: Healthchecks.io
+system: Hosting and operations setup
+architecture:
+  text: "Healthchecks.io runs on Hetzner bare-metal machines, each with one role: two HAProxy load balancers, three application servers (Nginx, uWSGI, Django) and a PostgreSQL primary with a hot standby. There are no containers, no autoscaling and nothing serverless."
+  locator: "Near: servers, each dedicated to a single role"
+components:
+  - name: Load balancers
+    role: "Two HAProxy machines serve HTTP/2 and IPv6, using ECDSA certificates for modern clients and RSA for old ones. A watchdog script on an external VM removes an unhealthy balancer's DNS records."
+    tech: haproxy
+    locator: "Section: Load balancers"
+  - name: Application servers
+    role: "Three machines run Nginx, uWSGI and Django, plus systemd daemons for sending alerts and reports. The load balancers drop an unhealthy or in-maintenance machine from rotation."
+    tech: django
+    locator: "Section: Application Servers"
+  - name: Database
+    role: "PostgreSQL 10 on a primary and a hot standby. Applications list several hosts in their connection strings, and failover is a manual decision following a tested procedure. Full daily backups are encrypted and uploaded to S3."
+    tech: postgres
+    locator: "Section: Database"
+  - name: Ping endpoint application
+    role: "A small Go application, kept closed source, serves the ping endpoints efficiently."
+    tech: go
+    locator: "Section: Custom Bits"
+  - name: Monitoring
+    role: "An agent and hosted dashboard watch the servers, Netdata on each machine helps with specific issues, four VMs elsewhere ping and log everything, and Papertrail aggregates logs and alerts on specific events."
+    locator: "Section: Monitoring"
+as_of: "2019-08"
+evidence: production
+workloads: [crud-app]
+footprint:
+  shape: single-database
+  locator: "Near: Primary/hot standby setup"
+scale:
+  # The post gives no request rate and no data size. Team size is stated: one person operates it.
+  traffic: null
+  data: null
+  team:
+    tier: 0
+    basis: stated
+  metrics:
+    - axis: team
+      name: people operating the service
+      value: 1
+      unit: person
+      qualifier: the author, who also builds it
+      locator: "Near: Operated by one person"
+    - axis: other
+      name: monthly cost of each load balancer machine
+      value: 69
+      unit: euros per month
+      qualifier: per machine; two machines
+      locator: "Near: Two Intel 9900K machines, costing €69/month each"
+    - axis: other
+      name: monthly cost of each application server
+      value: 39
+      unit: euros per month
+      qualifier: per machine; three machines
+      locator: "Near: Three Intel 6700/7700 machines, costing €39/month each"
+    - axis: other
+      name: monthly cost of each database server
+      value: 59
+      unit: euros per month
+      qualifier: per machine; two machines
+      locator: "Near: Two Intel Xeon E3-1275 machines, ECC RAM"
+source:
+  url: https://blog.healthchecks.io/hp-rewrite/253836a3dd9308c54dfbbc64c3908942
+  archive_url: null
+  title: A Look at Healthchecks.io Hosting Setup, Summer 2019
+  publisher: Healthchecks.io blog
+  author: Pēteris Caune
+  published: "2019-08-25"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [deployment-rollout, capacity-cost]
+    title: Run plain dedicated servers, one role each, with no containers, autoscaling or serverless
+    chosen:
+      text: "The core runs on Hetzner bare metal with plain servers each dedicated to one role. Provisioning scripts can set up a new machine quickly, but the set of machines rarely changes."
+      locator: "Section: A Look at Healthchecks.io Hosting Setup, Summer 2019"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The stated values are that simple, efficient and less are good, and Hetzner's value for money is a large part of why the current pricing is possible."
+      locator: "Near: Main values: Simple is good. Efficient is good."
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The primary database server had an uptime of 375 days at the time of writing."
+      locator: "Near: has an uptime of 375 days"
+    applies_from: null
+    aliases:
+      - bare metal instead of cloud
+      - no kubernetes small saas
+      - one person ops
+      - pets not cattle
+      - hetzner dedicated servers
+    tech: [hetzner, haproxy, postgres, django]
+  - id: d2
+    kind: decision
+    topics: [replication-failover]
+    title: Fail over the PostgreSQL primary to its hot standby by hand, using a tested procedure
+    chosen:
+      text: "The database runs as a primary and a hot standby. The failover procedure is tested but the decision to run it is made by the author, and applications with several hosts in their connection strings follow the new primary."
+      locator: "Section: Database"
+    rejected:
+      - option: Fully automated database failover
+        reason: "The author says he is not brave enough to automate failover completely."
+        locator: "Near: I am not brave enough to completely automate"
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - manual failover
+      - hot standby postgres
+      - do not automate failover
+      - multiple hosts in connection string
+    tech: [postgres]
+  - id: d3
+    kind: decision
+    topics: [service-boundaries, capacity-cost]
+    title: Replace Cloudflare's load balancer with two self-run HAProxy machines
+    chosen:
+      text: "Two dedicated machines running HAProxy replaced the Cloudflare Load Balancer, with a watchdog script on an external VM that removes unhealthy balancers from DNS."
+      locator: "Near: Before going HAProxy, I used Cloudflare Load Balancer"
+    rejected: []
+    forcing_condition: null
+    rationale: null
+    worked_before:
+      text: "Cloudflare Load Balancer was used before; the author says it performed well on some days and less well on others."
+      locator: "Near: Cloudflare was great on some days, and"
+    cost_paid:
+      text: "It took more work to research, set up and maintain the dedicated load balancer servers."
+      locator: "Near: took more work to research, set up,"
+    outcome:
+      text: "Compared with Cloudflare, the monthly running cost came out similar but slightly lower, HTTP latency as clients see it became much more consistent, and the author gained more control over configuration and more ways to diagnose problems."
+      locator: "Near: latencies seen from clients are much more consistent"
+    applies_from: null
+    aliases:
+      - self hosted load balancer
+      - haproxy instead of cloudflare
+      - load balancer latency inconsistent
+      - dns based load balancer failover
+    tech: [haproxy, cloudflare]
+  - id: d4
+    kind: decision
+    topics: [service-boundaries, replication-failover]
+    title: Drop a dedicated private switch and second network cards for Hetzner's vSwitch
+    chosen:
+      text: "The author moved off a private network built from a second network card in each server joined by a dedicated switch, and now servers talk to the load balancers over Hetzner's vSwitch."
+      locator: "Near: I later moved away from that setup"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "With the dedicated switch every server had to sit in the same rack, so no machines could be added once that rack was full, and a single critical switch failure could have taken out every server."
+      locator: "Near: servers had to be in the same rack"
+    worked_before:
+      text: "Early on, Hetzner support fitted two NICs per machine and a dedicated switch; a custom order takes days and costs more."
+      locator: "Near: I asked Hetzner support to install two NICs"
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - private network between servers
+      - dedicated switch single point of failure
+      - same rack limit
+    tech: [hetzner]
