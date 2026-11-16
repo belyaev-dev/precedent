@@ -1,6 +1,6 @@
 # Precedent corpus index
 
-Corpus version: `6744152dfbf3` (64 records from 28 cards)
+Corpus version: `f83360f6979a` (77 records from 33 cards)
 
 Scale is the system's tier on three axes: T traffic, D data, O team (operators). `?` means the source gives no usable figure; such records have unknown scale and never count as a match for your tier. Shape is the deployed footprint the source states (single-node, single-database, partitioned, multi-region), which is often the only size signal a small system gives. Floor is the advisory minimum tier for copying a decision, where one exists. Tier definitions are in SKILL.md.
 
@@ -14,11 +14,14 @@ The first table lists the systems, one per card: use it to find examples of how 
 | `37signals-2023-solid-queue` | 37signals: HEY background jobs (Active Job, Resque and Solid Queue) | 2023-12 | T? D? O? | - | job-queue | HEY runs its Active Job work on two backends at once: Resque on Redis, and the new database-backed Solid Queue, which at publication carried about a third of a stated total of roughly 18 million jobs a day, with more being moved. |
 | `37signals-2025-fizzy-database` | 37signals: Fizzy database layer | 2025 | T? D? O? | single-database | multi-tenant-data | Fizzy, a 37signals product, runs on one big MySQL database holding every customer's data. An earlier design giving each customer its own SQLite database ran only for staff and invited testers and was dropped before launch. |
 | `atlassian-2022-site-deletion-restore` | Atlassian: Cloud multi-tenant platform | 2022-04 | T? D? O? | multi-region | multi-tenant-data | Atlassian's cloud products run on a multi-tenant microservice platform in which services and databases serve many customers, and each shard holds several tenants' data, kept isolated from one another. |
+| `bluesky-2025-lossy-timelines` | Bluesky: Following feed timeline fanout | 2025-02 | T5 D? O? | partitioned | feed-fanout | When someone posts, a reference to the post is fanned out to each follower's timeline, a row in a Timelines table in ScyllaDB sharded by user and trimmed on write to a target length. Reads fetch a page of references and hydrate the posts and authors concurrently. |
 | `brandur-2015-postgres-job-queue` | Not named in the source (the author's employer): Postgres-backed job queue (Queue Classic, then Que) | undated | T? D? O? | - | job-queue | A job queue kept in a Postgres table, run first on the Queue Classic library and then on Que, whose workers lock jobs with Postgres advisory locks. |
+| `clerk-2025-database-connection-recycling` | Clerk: Clerk APIs and their Postgres database | 2025-09 | T? D? O? | - | auth-session | Clerk's Cloud Run deployment runs many containers, each with its own database connection pooler whose connections close and are replaced after a static maximum lifetime of 15 minutes. |
 | `dwolla-2019-webhooks` | Dwolla: Webhook notifications | 2019 | T? D? O? | - | webhook-delivery | Each subscribed customer has its own SQS queue and Lambda handler; events are looked up and sent to that customer's queue, and delivery results go to a separate queue for storage. |
 | `ethicalads-2021-ad-server` | EthicalAds: Ad server | 2021 | T1 D? O? | single-database | crud-app | A separate Django ad server, split out of the Read the Docs code line in late 2019, with Postgres as the source of truth and Redis for caching. Most traffic is a few APIs such as requesting and viewing an ad. It runs on autoscaled VM scale sets, usually 3-4 instances. |
 | `fathom-2020-viral-customer-backlog` | Fathom Analytics: Pageview queue and MySQL database | 2020-08 | T? D? O? | single-database | analytics-pipeline, job-queue | Fathom runs on serverless infrastructure (Lambda, SQS and similar, through Laravel Vapor), with pageviews processed from a background queue. |
 | `fathom-2021-singlestore-database` | Fathom Analytics: Pageview ingest and application database | 2021-09 | T? D? O? | single-database | analytics-pipeline | Fathom's ingest point runs on Laravel Vapor and writes pageviews to SQS. SingleStore handles everything else over persistent connections, including tens of thousands of inserts per second, all key/value lookups and application rate limiting. |
+| `github-2023-code-search` | GitHub: Code search (Blackbird) | 2023-02 | T? D4 O? | partitioned | search-indexing | Blackbird is a search engine written from scratch in Rust for code. Kafka carries indexing work to crawlers and then to indexer shards that build ngram indices, and a query service fans each query out to every shard and merges the results. |
 | `govuk-2020-email-alert-lost-jobs` | GOV.UK: Email Alert API background processing | 2020-12 | T? D? O? | - | job-queue | Email Alert API uses Sidekiq, with jobs held in Redis, for background work including generating and sending email. Jobs can be lost when enqueueing fails or when a worker is killed while processing. |
 | `healthchecks-2019-hosting-setup` | Healthchecks.io: Hosting and operations setup | 2019-08 | T? D? O0 | single-database | crud-app | Healthchecks.io runs on Hetzner bare-metal machines, each with one role: two HAProxy load balancers, three application servers (Nginx, uWSGI, Django) and a PostgreSQL primary with a hot standby. There are no containers, no autoscaling and nothing serverless. |
 | `healthchecks-2025-ping-ingest` | Healthchecks.io: Ping ingest endpoints (hc-ping.com) | 2025 | T4 D? O? | single-database | job-queue | The hosted service's ping endpoints run a closed-source Go application on three physical servers. Each request is validated and queued on an in-process channel, and workers write it to a PostgreSQL database that runs on a separate server. |
@@ -31,7 +34,9 @@ The first table lists the systems, one per card: use it to find examples of how 
 | `onfido-2024-webhooks` | Onfido: Webhook delivery service | 2024-03 | T? D? O? | - | webhook-delivery | At the time of the incident all webhook messages were processed through a single queue at a cloud provider. |
 | `onlineornot-2023-lambda-write-fan-in` | OnlineOrNot: Uptime check scheduling and result storage | undated | T? D? O? | single-database | job-queue | A single RDS Postgres instance holds the data. A Lambda fires every minute to find URLs to check, an SQS queue triggers checker Lambdas, and their results go through SNS into a second queue that batches them for one Lambda to write to the database. |
 | `slack-2017-job-queue` | Slack: Job queue | 2017 | T4 D? O? | partitioned | job-queue | Jobs are queued in Redis clusters and executed by worker pools. Slack added Kafka in front of Redis as a durable buffer rather than replacing Redis, keeping the existing enqueue and dequeue interfaces. |
+| `slack-2023-real-time-messaging` | Slack: Real-time messaging service | 2023-04 | T? D? O? | multi-region | realtime-messaging | Slack's real-time layer is four Java services. Stateful in-memory Channel Servers hold channels placed by consistent hashing, Gateway Servers hold the websocket connections, Admin Servers carry messages in from the web app, and Presence Servers track who is online. |
 | `sourcehut-2020-simple-infrastructure` | SourceHut: SourceHut code forge infrastructure | 2020-04 | T? D? O? | - | crud-app | SourceHut runs on 10 dedicated servers and about 30 virtual machines, all provisioned by hand, with no Kubernetes, Docker or CloudFormation. Its application is split into independent miniservices that can fail separately, and many pages make only one or two database round-trips. |
+| `square-2019-books-ledger` | Square: Books, an immutable double-entry accounting database service | 2019-10 | T? D4 O0 | - | ledger-payments, multi-tenant-data | Books records money movements as double-entry journal entries, each of which must balance to zero, in a Google Cloud Spanner database, and the service leans on Spanner and Google Kubernetes Engine to serve many internal clients and businesses worldwide. |
 | `stackoverflow-2016-architecture` | Stack Overflow: Stack Overflow and the Stack Exchange network | 2016-02 | T3 D? O? | partitioned | crud-app, multi-tenant-data, read-cache | One multi-tenant ASP.NET application on IIS serves every Q&A site behind HAProxy load balancers. SQL Server is the single source of truth, with Redis, Elasticsearch and a tag engine fed from it, and everything is duplicated in a second data center. |
 | `tailscale-2021-control-plane-state` | Tailscale: Control plane (CONTROL) | undated | T? D? O? | single-node | control-plane | Tailscale's coordination server, CONTROL, runs as one Go process on one VM. Its data model was held in memory behind one mutex and persisted by writing the whole structure to disk as JSON on every edit, until the move to etcd described here. |
 | `tarsnap-2012-ec2-power-outage` | Tarsnap: Tarsnap central server and S3-backed storage | 2012-06 | T? D? O? | - | blob-pipeline | Tarsnap stores all user data in Amazon S3 and keeps only metadata cached on its central server in EC2. The design is meant to survive the loss of everything held on EC2: the data is read back from S3 and the full operation log is replayed. |
@@ -49,6 +54,12 @@ The first table lists the systems, one per card: use it to find examples of how 
 | `fathom-2020-viral-customer-backlog#d2` | decision | T? D? O? | single-database | - | tenant-isolation, load-shedding-backpressure | Fathom Analytics, 2020-08: Limit pageviews processed per site per minute so one viral site cannot block the rest, then drop it |
 | `fathom-2021-singlestore-database#d1` | decision | T? D? O? | single-database | - | datastore-choice, capacity-cost, load-shedding-backpressure | Fathom Analytics, 2021-09: Stop using DynamoDB and serve key/value lookups, ingest and rate limiting from one fixed-size SingleStore cluster |
 | `fathom-2021-singlestore-database#d2` | decision | T? D? O? | single-database | - | capacity-cost, async-processing | Fathom Analytics, 2021-09: Keep database connections open by moving the dashboard and queue off per-request Lambda connections |
+
+## auth-session
+
+| Record | Kind | Scale | Shape | Floor | Topics | What it is |
+|---|---|---|---|---|---|---|
+| `clerk-2025-database-connection-recycling#f1` | failure | T? D? O? | - | - | load-shedding-backpressure, dependency-failure | Clerk, 2025-09: Connection pools that recycled every 15 minutes synchronized into a thundering herd after a managed Postgres upgrade |
 
 ## blob-pipeline
 
@@ -89,6 +100,14 @@ The first table lists the systems, one per card: use it to find examples of how 
 | `stackoverflow-2016-architecture#d3` | decision | T3 D? O? | partitioned | - | caching | Stack Overflow, 2016-02: Cache in two layers, a web-server HTTP cache and Redis, and clear the first layer through Redis pub/sub |
 | `stackoverflow-2016-architecture#d4` | decision | T3 D? O? | partitioned | - | capacity-cost, load-shedding-backpressure | Stack Overflow, 2016-02: Push updates to browsers over websockets, which are more efficient than polling, at the cost of load balancer port exhaustion |
 
+## feed-fanout
+
+| Record | Kind | Scale | Shape | Floor | Topics | What it is |
+|---|---|---|---|---|---|---|
+| `bluesky-2025-lossy-timelines#f1` | failure | T5 D? O? | partitioned | - | tenant-isolation, datastore-partitioning | Bluesky, 2025-02: Users who follow hundreds of thousands of accounts made hot shards that slowed the timelines sharing them |
+| `bluesky-2025-lossy-timelines#d1` | decision | T5 D? O? | partitioned | - | tenant-isolation, load-shedding-backpressure | Bluesky, 2025-02: Drop timeline writes with a probability set by how many accounts a user follows, accepting imperfect timelines |
+| `bluesky-2025-lossy-timelines#d2` | decision | T5 D? O? | partitioned | - | caching, capacity-cost | Bluesky, 2025-02: Cache high-follow accounts in a Redis sorted set loaded into memory every 30 seconds instead of reading follow counts per write |
+
 ## job-queue
 
 | Record | Kind | Scale | Shape | Floor | Topics | What it is |
@@ -109,6 +128,14 @@ The first table lists the systems, one per card: use it to find examples of how 
 | `slack-2017-job-queue#d2` | decision | T4 D? O? | partitioned | - | delivery-idempotency, consistency-transactions | Slack, 2017: Enqueue path acknowledges after the Kafka leader only, trading a small risk of lost jobs for latency |
 | `tosbourn-2023-client-rails-jobs#d1` | decision | T0 D? O? | - | - | datastore-choice, capacity-cost, async-processing | Unnamed client of Tosbourn Ltd, 2023: Removed Redis and Sidekiq for GoodJob on the existing Postgres database, to cut cost and parts |
 
+## ledger-payments
+
+| Record | Kind | Scale | Shape | Floor | Topics | What it is |
+|---|---|---|---|---|---|---|
+| `square-2019-books-ledger#d1` | decision | T? D4 O0 | - | - | consistency-transactions, schema-data-migration | Square, 2019-10: Model money as balanced double-entry journal entries so every cent moved is matched and payouts can be split |
+| `square-2019-books-ledger#d2` | decision | T? D4 O0 | - | - | datastore-choice, datastore-partitioning | Square, 2019-10: Store the ledger in Cloud Spanner, shaping the schema for it, instead of sharding SQL in the application |
+| `square-2019-books-ledger#d3` | decision | T? D4 O0 | - | - | consistency-transactions | Square, 2019-10: Make journal and book entries append-only and fix mistakes with correcting entries |
+
 ## multi-tenant-data
 
 | Record | Kind | Scale | Shape | Floor | Topics | What it is |
@@ -127,6 +154,22 @@ The first table lists the systems, one per card: use it to find examples of how 
 |---|---|---|---|---|---|---|
 | `healthchecks-2025-tarpit-outage#f1` | failure | T? D? O? | - | - | load-shedding-backpressure, observability | Healthchecks.io, 2025-11: Tarpit rate limiting held sockets open until the load balancers ran out of connection slots and rejected real traffic |
 | `healthchecks-2025-tarpit-outage#d1` | decision | T? D? O? | - | - | load-shedding-backpressure | Healthchecks.io, 2025-11: Answer rate-limited requests with an immediate HTTP 429 instead of tarpitting them |
+
+## realtime-messaging
+
+| Record | Kind | Scale | Shape | Floor | Topics | What it is |
+|---|---|---|---|---|---|---|
+| `slack-2023-real-time-messaging#d1` | decision | T? D? O? | multi-region | - | datastore-partitioning, replication-failover | Slack, 2023-04: Place channels on stateful Channel Servers by consistent hashing so a failed server is replaced in seconds |
+| `slack-2023-real-time-messaging#d2` | decision | T? D? O? | multi-region | - | replication-failover, service-boundaries | Slack, 2023-04: Deploy Gateway Servers in several regions so clients connect nearby, with draining to move users off a failed region |
+| `slack-2023-real-time-messaging#d3` | decision | T? D? O? | multi-region | - | async-processing | Slack, 2023-04: Send transient events such as typing indicators through the same servers without saving them |
+
+## search-indexing
+
+| Record | Kind | Scale | Shape | Floor | Topics | What it is |
+|---|---|---|---|---|---|---|
+| `github-2023-code-search#d1` | decision | T? D4 O? | partitioned | - | datastore-choice, capacity-cost | GitHub, 2023-02: Build a custom code search engine in Rust instead of general text search, because indexing was slow and costly |
+| `github-2023-code-search#d2` | decision | T? D4 O? | partitioned | - | datastore-partitioning, capacity-cost | GitHub, 2023-02: Shard the search index by Git blob ID and store it as a delta-encoded tree to remove duplicate content |
+| `github-2023-code-search#d3` | decision | T? D4 O? | partitioned | - | async-processing, consistency-transactions | GitHub, 2023-02: Decouple crawling from indexing with Kafka, one partition per shard, to get commit-consistent queries |
 
 ## webhook-delivery
 

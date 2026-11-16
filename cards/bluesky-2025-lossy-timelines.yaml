@@ -1,0 +1,155 @@
+schema: 1
+id: bluesky-2025-lossy-timelines
+title: Bluesky drops some timeline writes for users who follow huge numbers of accounts to stop hot shards, at over a million timeline writes a second
+org: Bluesky
+system: Following feed timeline fanout
+architecture:
+  text: "When someone posts, a reference to the post is fanned out to each follower's timeline, a row in a Timelines table in ScyllaDB sharded by user and trimmed on write to a target length. Reads fetch a page of references and hydrate the posts and authors concurrently."
+  locator: "Section: Timeline Fanout"
+components:
+  - name: Fanout service
+    role: "Looks up a poster's followers and writes the post reference to each follower's timeline, taking followers a page of 10,000 at a time and finishing a page before fetching the next."
+    locator: "Section: Stacking Latencies"
+  - name: Timelines table on ScyllaDB
+    role: "Holds one partition per user, spread randomly over hundreds of shards and replicated, so tens of thousands of users share each shard. Older references are trimmed when a timeline is written."
+    tech: scylladb
+    locator: "Section: Hot Shards in Your Area"
+  - name: High-follow account cache
+    role: "A Redis sorted set of accounts that follow many others, loaded into memory by each fanout instance every 30 seconds, so follow counts can be checked without extra reads on the main database."
+    tech: redis
+    locator: "Section: Aside on Caching"
+  - name: Timeline read path
+    role: "Fetches a page of post references for a user, then hydrates the posts and authors concurrently to build the API response."
+    locator: "Section: Timeline Fanout"
+as_of: "2025-02"
+evidence: production
+workloads: [feed-fanout]
+footprint:
+  shape: partitioned
+  locator: "Near: broken into hundreds of shards"
+scale:
+  # The write rate is stated for the busy parts of the day. The post gives no data size or team size.
+  # It writes the rate as "one million", so the metric value is 1 with the unit in millions.
+  traffic:
+    tier: 5
+    basis: stated
+    note: "The post reports more than one million timeline writes a second in the busy parts of the day, which falls in tier 5 (100,000 or more)."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: timeline writes during the busy parts of the day
+      value: 1
+      unit: million writes per second
+      qualifier: more than; busy parts of the day; Timelines database
+      locator: "Near: more than one million times a second"
+    - axis: other
+      name: users
+      value: 32
+      unit: million users
+      qualifier: around; at publication
+      locator: "Near: around 32 Million Users and our Timelines"
+    - axis: other
+      name: average write latency to a single timeline
+      value: 600
+      unit: microseconds
+      qualifier: approximate; average
+      locator: "Near: takes an average of ~600 microseconds"
+source:
+  url: https://jazco.dev/2025/02/19/imperfection/
+  archive_url: null
+  title: "When Imperfect Systems are Good, Actually: Bluesky's Lossy Timelines"
+  publisher: Jaz's Blog
+  author: Jaz
+  published: "2025-02-19"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [tenant-isolation, datastore-partitioning]
+    title: Users who follow hundreds of thousands of accounts made hot shards that slowed the timelines sharing them
+    trigger:
+      text: "Some users follow hundreds of thousands of other accounts, so their own timeline partition is written to and trimmed at hugely elevated rates."
+      locator: "Section: Hot Shards in Your Area"
+    mechanism:
+      text: "Each timeline partition shares a shard with tens of thousands of others. A hot partition keeps its shard busy, so operations on every colocated partition slow down too, and because data is only replicated a few times the cluster's horizontal scale cannot absorb the extra work."
+      locator: "Section: Hot Shards in Your Area"
+    why_defences_failed:
+      text: "Such behaviour can be dealt with by policy and moderation, but those processes take time and can be imperfect."
+      locator: "Section: Hot Shards in Your Area"
+    impact:
+      text: "Fanout jobs for large accounts used to take 5-10 minutes."
+      locator: "Section: Results"
+    fix:
+      text: "Introduced lossy timelines, which drop some fanout writes for users who follow very many accounts. It had been in production for a few weeks at the time of the post."
+      locator: "Section: Results"
+    curator_notes:
+      - "The post separately works out that tail latency stacks up in a large fanout: with an average write of about 600 microseconds but a P99 as high as 15 milliseconds, a 2,000,000-follower account's fanout could take as long as 5 minutes in the worst case."
+    aliases:
+      - hot shard from one heavy user
+      - noisy neighbour in shared partitions
+      - celebrity fanout is slow
+      - tail latency in fanout jobs
+      - user following hundreds of thousands
+    tech: [scylladb]
+  - id: d1
+    kind: decision
+    topics: [tenant-isolation, load-shedding-backpressure]
+    title: Drop timeline writes with a probability set by how many accounts a user follows, accepting imperfect timelines
+    chosen:
+      text: "Each user gets a loss factor of the smaller of a reasonable follow limit divided by their follows, and 1. Before writing a page of fanout, one random number is drawn and every follower in the page whose loss factor is below it is left out. With a limit of 2,000, a user following 4,000 accounts has half their timeline writes dropped."
+      locator: "Section: Lossy Timelines"
+    rejected: []
+    forcing_condition:
+      text: "Users following hundreds of thousands of accounts made hot shards that caused problems for the tens of thousands of other users sharing a shard."
+      locator: "Section: Hot Shards in Your Area"
+    rationale:
+      text: "Beyond some number of follows a user cannot keep up with their timeline anyway and likely reads other feeds, so a perfect chronology is not needed and there should be a cap on the work one timeline places on a shard."
+      locator: "Section: Lossy Timelines"
+    worked_before: null
+    cost_paid:
+      text: "Timelines of users who follow many accounts are no longer a perfect chronology of everything those accounts post."
+      locator: "Section: Lossy Timelines"
+    outcome:
+      text: "Hot shards dropped to none that the author could see, the P99 of a page of fanout fell by over 90%, and the P99 of a full post fanout fell by over 96%. Jobs that took 5-10 minutes for large accounts now take under 10 seconds."
+      locator: "Section: Results"
+    applies_from: null
+    aliases:
+      - probabilistic load shedding
+      - cap work per user in fanout
+      - lossy feed
+      - drop writes for heavy followers
+      - loss factor
+    tech: [scylladb]
+  - id: d2
+    kind: decision
+    topics: [caching, capacity-cost]
+    title: Cache high-follow accounts in a Redis sorted set loaded into memory every 30 seconds instead of reading follow counts per write
+    chosen:
+      text: "Accounts that follow many others are kept in a Redis sorted set, and every fanout instance loads an updated copy into memory every 30 seconds, so follow counts can be checked millions of times a second per instance."
+      locator: "Section: Aside on Caching"
+    rejected:
+      - option: Looking up each follower's follow count in the primary database during fanout
+        reason: "Timelines are written more than one million times a second at busy times, so it would add more than one million reads a second to the primary database cluster, which it would not handle well."
+        locator: "Section: Aside on Caching"
+    forcing_condition: null
+    rationale:
+      text: "The follow counts do not need to be perfect for the loss factor to work."
+      locator: "Section: Aside on Caching"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - cache follower counts in memory
+      - periodic reload of a hot set
+      - avoid a database read per write
+      - redis sorted set of heavy users
+    tech: [redis]

@@ -1,0 +1,151 @@
+schema: 1
+id: square-2019-books-ledger
+title: Square builds Books, a double-entry ledger on Spanner holding about 20TB and run by three people
+org: Square
+system: Books, an immutable double-entry accounting database service
+architecture:
+  text: "Books records money movements as double-entry journal entries, each of which must balance to zero, in a Google Cloud Spanner database, and the service leans on Spanner and Google Kubernetes Engine to serve many internal clients and businesses worldwide."
+  locator: "Near: Google Cloud Spanner and Google Kubernetes Engine to"
+components:
+  - name: books table
+    role: "One row per book, a named bucket such as Payments, Refunds, Pending Balance or Payouts, with a type, an owner and a running balance that changes only through accounting transactions."
+    locator: "Near: this table has one row for each book"
+  - name: journal_entries table
+    role: "One row is added each time books change value in an accounting transaction, and the entries in a transaction must balance to zero."
+    locator: "Near: journal_entries: every time our books change value"
+  - name: book_entries table
+    role: "Links a journal entry to a book with a debit or credit amount, and keeps a monotonic version counter for each book."
+    locator: "Near: book_entries: each row in this table has foreign"
+  - name: Shelves
+    role: "Tenants. Every secondary index that user data can influence is namespaced by shelf, so internal clients do not clobber each other's workloads."
+    locator: "Near: Books models a tenant as a concept called"
+  - name: Google Cloud Spanner
+    role: "The storage layer, a managed, globally distributed SQL database chosen so the team did not have to shard or maintain the database."
+    tech: spanner
+    locator: "Section: Modeling Double Entry Accounting in SQL"
+as_of: "2019-10"
+evidence: production
+workloads: [ledger-payments, multi-tenant-data]
+footprint: null
+scale:
+  # The post states the data volume and the team size for the service at the time of writing.
+  # It gives no request rate.
+  traffic: null
+  data:
+    tier: 4
+    basis: stated
+  team:
+    tier: 0
+    basis: stated
+  metrics:
+    - axis: data
+      name: data managed by Books
+      value: 20
+      unit: TB
+      qualifier: approximate; at the time of writing
+      locator: "Near: managing ~20TB of data and is developed"
+    - axis: team
+      name: people who develop and maintain Books
+      value: 3
+      unit: people
+      qualifier: a small team
+      locator: "Near: small team of three people"
+source:
+  url: https://developer.squareup.com/blog/books-an-immutable-double-entry-accounting-database-service/
+  archive_url: null
+  title: Books, an immutable double-entry accounting database service
+  publisher: The Corner, Square's technical blog
+  author: Łukasz Strzałkowski
+  published: "2019-10-16"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [consistency-transactions, schema-data-migration]
+    title: Model money as balanced double-entry journal entries so every cent moved is matched and payouts can be split
+    chosen:
+      text: "Money is modelled as double-entry journal entries that must balance to zero, with each book holding a running balance. A merchant's payout amount is then a single row, with no group-by over entries, and a payout can be split by any amount."
+      locator: "Section: Double Entry Accounting Primitive"
+    rejected: []
+    forcing_condition:
+      text: "The old settlement service strained under more complex products: each payout needed an expensive group-by to compute a merchant's balance, a payment could not be split across payouts, nothing stopped a payout_id being nulled, and data inconsistencies caused customer inquiries and delayed deposits."
+      locator: "Section: Problem"
+    rationale:
+      text: "Double-entry accounting makes you state why a balance changed as well as what changed, and requires every transaction to sum to zero, so any money leaving one book is offset by money arriving in another."
+      locator: "Section: Double Entry Accounting Primitive"
+    worked_before:
+      text: "A settlement service with tables of accounting adjustments, each marked with a payout identifier on settlement, on a SQL database that later got a sharding scheme of its own."
+      locator: "Section: Problem"
+    cost_paid:
+      text: "The meaning of signs was hard for engineers to grasp and took practice, and Square relaxed standard conventions by treating debits as positive and credits as negative."
+      locator: "Section: Double Entry Accounting Primitive"
+    outcome:
+      text: "The author calls the introduction of Books a big success. At the time of writing the service manages about 20TB of data and is run by a small team of three people."
+      locator: "Section: Summary"
+    applies_from: null
+    aliases:
+      - ledger instead of settlement tables
+      - double entry bookkeeping in sql
+      - balances must sum to zero
+      - split payments across payouts
+      - merchant balance without group by
+    tech: [spanner]
+  - id: d2
+    kind: decision
+    topics: [datastore-choice, datastore-partitioning]
+    title: Store the ledger in Cloud Spanner, shaping the schema for it, instead of sharding SQL in the application
+    chosen:
+      text: "The ledger lives in Google Cloud Spanner. To scale horizontally the schema uses UUIDs in place of increasing integers, avoids timestamp hotspots, and interleaves book entries with journal entries."
+      locator: "Section: Modeling Double Entry Accounting in SQL"
+    rejected:
+      - option: Sharding a SQL database in the application, as the old ledger did
+        reason: "The old system took considerable effort to shard and then had to deal with cross-shard transactions when two merchants exchanged value."
+        locator: "Section: Problem"
+    forcing_condition: null
+    rationale:
+      text: "Spanner is a fully managed, globally distributed SQL database, which spared the team from sharding and from operating a database themselves."
+      locator: "Section: Modeling Double Entry Accounting in SQL"
+    worked_before: null
+    cost_paid:
+      text: "The Spanner schema rules took some time and experimentation to get right."
+      locator: "Section: Modeling Double Entry Accounting in SQL"
+    outcome:
+      text: "After trial and error and load testing, the service scales horizontally by adding a few nodes in the Spanner console."
+      locator: "Section: Modeling Double Entry Accounting in SQL"
+    applies_from: null
+    aliases:
+      - spanner for a ledger
+      - no application level sharding
+      - uuid keys to avoid hotspots
+      - interleaved tables
+      - cross shard transfers between accounts
+    tech: [spanner, kubernetes]
+  - id: d3
+    kind: decision
+    topics: [consistency-transactions]
+    title: Make journal and book entries append-only and fix mistakes with correcting entries
+    chosen:
+      text: "Journal entries and book entries are inserted and never updated. A wrong movement is corrected by writing a new entry, and only the books table, which holds the current balance, changes in place."
+      locator: "Section: Immutability"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Because balances are cached on the entries, the data sets are effectively append-only, which gives an audit log of everything that ever happened, including mistakes."
+      locator: "Section: Immutability"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - append only ledger
+      - correcting entries instead of updates
+      - audit log of money movements
+      - immutable financial records
+    tech: [spanner]

@@ -1,0 +1,75 @@
+schema: 1
+id: clerk-2025-database-connection-recycling
+title: A Postgres minor upgrade removed an accidental rate limiter, and synchronized 15-minute connection recycling overloaded Clerk's database
+org: Clerk
+system: Clerk APIs and their Postgres database
+architecture:
+  text: "Clerk's Cloud Run deployment runs many containers, each with its own database connection pooler whose connections close and are replaced after a static maximum lifetime of 15 minutes."
+  locator: "Section: 2. Our Cloud Run and connection pooling configuration"
+as_of: "2025-09"
+evidence: incident
+workloads: [auth-session]
+footprint: null
+scale:
+  # The post gives no request rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: maximum lifetime of a pooled database connection
+      value: 15
+      unit: minutes
+      qualifier: static, with no jitter, before the fix
+      locator: "Near: static maximum connection lifetime of 15 minutes"
+    - axis: other
+      name: sampling interval of database connection metrics
+      value: 60
+      unit: seconds
+      qualifier: too coarse to show cycling that happened within seconds
+      locator: "Near: sampled at 60-second intervals"
+source:
+  url: https://clerk.com/blog/2025-09-18-database-incident-postmortem
+  archive_url: null
+  title: "Postmortem: Database Incident (September 14–18, 2025)"
+  publisher: Clerk blog
+  author: Colin Sidoti, Braden Sidoti and Brandon Romano
+  published: "2025-09-18"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [load-shedding-backpressure, dependency-failure]
+    title: Connection pools that recycled every 15 minutes synchronized into a thundering herd after a managed Postgres upgrade
+    trigger:
+      text: "On September 14 the cloud provider automatically upgraded Clerk's Postgres database to a new minor version. Granting new connections used to take time growing with the square of the connection count, which inadvertently acted as a rate limiter, but after the upgrade large batches could be granted almost instantly."
+      locator: "Section: 1. Postgres change to connection lock handling"
+    mechanism:
+      text: "Each container's pooler replaced its connections on a fixed 15-minute lifetime. Under back pressure the containers' recycling cycles bunched together, like buses, so every container refreshed its connections at once every 15 minutes. This thundering herd compounded until it exhausted active connections and caused latency spikes."
+      locator: "Section: 3. Back pressure causes synchronization of connection recycling across all Cloud Run containers"
+    why_defences_failed:
+      text: "Metrics sampled every 60 seconds hid a pattern that played out within seconds. A fraudulent sign-up attack with its own surges roughly every 10 minutes, recurring background jobs and a release freeze, which stopped the natural staggering that deploys give, all obscured the cause."
+      locator: "Section: Why Diagnosis Was Difficult"
+    impact:
+      text: "From September 15 to 18 requests intermittently failed and latency spiked. During the later periodic spikes, sessions kept working because session endpoints tolerate more latency and the SDKs retry, but new sign-ins and sign-ups failed for 3-6 minutes during a manual upgrade."
+      locator: "Section: Timeline"
+    fix:
+      text: "Added jitter to the connection pooling lifetime to stop synchronized cycling. The database then stayed stable and performed better than before the upgrade, helped by query and index work done during the incident."
+      locator: "Section: Resolution and current status"
+    curator_notes:
+      - "The post lists further work as planned: evaluating other database providers, isolating sign-up and sign-in infrastructure, and investigating tenant isolation. The provider would not roll back the upgrade."
+    aliases:
+      - connection pool thundering herd
+      - synchronized connection recycling
+      - max connection lifetime without jitter
+      - managed database auto upgrade broke us
+      - latency spikes every 15 minutes
+      - back pressure synchronizes periodic work
+    tech: [postgres, cloud-run]

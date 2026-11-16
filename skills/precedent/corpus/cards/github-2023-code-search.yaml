@@ -1,0 +1,166 @@
+schema: 1
+id: github-2023-code-search
+title: GitHub builds Blackbird, its own Rust code search engine, with a 25 TB index sharded by Git blob ID
+org: GitHub
+system: Code search (Blackbird)
+architecture:
+  text: "Blackbird is a search engine written from scratch in Rust for code. Kafka carries indexing work to crawlers and then to indexer shards that build ngram indices, and a query service fans each query out to every shard and merges the results."
+  locator: "Section: Let’s build an index"
+components:
+  - name: Kafka
+    role: "Delivers events that say what to index, then carries the crawled documents on a second topic whose partitions map to shards, so indexing is decoupled from crawling and message order gives commit-level query consistency."
+    tech: kafka
+    locator: "Section: Let’s build an index"
+  - name: Crawlers and symbol extraction
+    role: "Fetch blob content from Git, extract symbols and build the documents to index. Each repository is diffed against its parent in a delta tree, so only blobs unique to it are crawled."
+    locator: "Section: Let’s build an index"
+  - name: Indexer shards
+    role: "Each shard consumes one Kafka partition and builds ngram indices for content, symbols and paths, plus language, owner and repository indices, flushes them to disk, then compacts small indices into larger ones."
+    locator: "Section: Let’s build an index"
+  - name: Query service
+    role: "Parses a user query into a syntax tree and rewrites it with canonical language IDs and permission clauses, sends it to every shard, then merges, re-sorts, double-checks permissions and returns the top 100."
+    locator: "Section: Life of a query"
+  - name: Redis
+    role: "Manages query quotas and caches some access-control data."
+    tech: redis
+    locator: "Section: Life of a query"
+as_of: "2023-02"
+evidence: production
+workloads: [search-indexing]
+footprint:
+  shape: partitioned
+  locator: "Near: Shard by Git blob object ID which gives"
+scale:
+  # Data tier rests on the size of the index including its compressed copy of unique content.
+  # The 115 TB figure is the corpus being searched, not stored state. The post gives no live
+  # query rate or team size.
+  traffic: null
+  data:
+    tier: 4
+    basis: stated
+    note: "The index, including a compressed copy of all unique content, is 25 TB, which is tier 4 (10 TB to under 100 TB). The 115 TB is the code being searched, not state the system stores."
+  team: null
+  metrics:
+    - axis: data
+      name: total index size including compressed unique content
+      value: 25
+      unit: TB
+      qualifier: during the public beta
+      locator: "Near: index itself clocks in at just 25 TB"
+    - axis: other
+      name: code covered by the index
+      value: 115
+      unit: TB
+      qualifier: almost 45 million repositories, 15.5 billion documents; before deduplication
+      locator: "Near: 115 TB of code and 15.5 billion documents"
+    - axis: other
+      name: documents the ingest pipeline can publish
+      value: 120000
+      unit: documents per second
+      qualifier: around
+      locator: "Near: can publish around 120,000 documents per second"
+    - axis: other
+      name: query rate ceiling for one 64-core index host
+      value: 640
+      unit: queries per second
+      qualifier: something like; an upper bound from CPU use, not a measured peak
+      locator: "Near: upper bound of something like 640 queries per"
+source:
+  url: https://github.blog/engineering/architecture-optimization/the-technology-behind-githubs-new-code-search/
+  archive_url: null
+  title: The technology behind GitHub’s new code search
+  publisher: The GitHub Blog
+  author: Timothy Clem
+  published: "2023-02-06"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, capacity-cost]
+    title: Build a custom code search engine in Rust instead of general text search, because indexing was slow and costly
+    chosen:
+      text: "GitHub wrote Blackbird, a new search engine in Rust designed only for searching code."
+      locator: "Near: our own search engine from scratch, in Rust"
+    rejected:
+      - option: General text search products such as Elasticsearch
+        reason: "Poor user experience, slow indexing and high hosting cost."
+        locator: "Near: a lot of luck using general text search"
+      - option: Newer code-specific open source projects
+        reason: "They could not cope with GitHub's scale."
+        locator: "Near: they definitely don't work at GitHub's scale"
+      - option: Brute-force search with grep
+        reason: "Napkin math with ripgrep, assuming all 115 TB in memory and perfect parallelism, has one query saturating 2,048 CPU cores for 96 seconds while every other query waits, 0.01 queries per second, with no cost-effective way to scale."
+        locator: "Section: Just use grep?"
+    forcing_condition:
+      text: "Elasticsearch took months to index all of the code when first deployed, at about 8 million repositories, and GitHub is now north of 200 million repositories whose code keeps changing."
+      locator: "Near: took months to index all of the code"
+    rationale:
+      text: "A new experience built on iteratively searching, browsing and reading code, and code-specific needs: searching punctuation, no stemming, no stop words and regular expressions."
+      locator: "Near: vision for an entirely new user experience"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The public beta can search almost 45 million repositories."
+      locator: "Near: you can currently search almost 45 million repositories"
+    applies_from: null
+    aliases:
+      - build or buy search engine
+      - elasticsearch too slow to index code
+      - code search ngram index
+      - why not grep
+      - custom search engine in rust
+    tech: [rust, elasticsearch]
+  - id: d2
+    kind: decision
+    topics: [datastore-partitioning, capacity-cost]
+    title: Shard the search index by Git blob ID and store it as a delta-encoded tree to remove duplicate content
+    chosen:
+      text: "The index is sharded by Git blob object ID, so identical content lands in one place, and is modelled as a tree with delta encoding to cut the crawling needed and shrink metadata such as where each document appears."
+      locator: "Section: Indexing 45 million repositories"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Blob IDs spread documents evenly across shards without duplication, so no special repository makes a hot server and shards can be added as needed. Much content on GitHub is duplicated."
+      locator: "Section: Indexing 45 million repositories"
+    worked_before: null
+    cost_paid:
+      text: "Because of the sharding strategy, every query must be sent to each shard in the cluster."
+      locator: "Section: Life of a query"
+    outcome:
+      text: "Deduplication and delta indexing cut 115 TB of content to around 28 TB of unique content. Delta indexing cuts the documents to crawl by over 50%, so the whole corpus can be re-indexed in about 18 hours, against an estimated 36 hours for all 15.5 billion documents at the pipeline's publish rate."
+      locator: "Section: In summary"
+    applies_from: null
+    aliases:
+      - shard by content hash
+      - deduplicate content in an index
+      - delta encoding index
+      - every query hits every shard
+    tech: [git]
+  - id: d3
+    kind: decision
+    topics: [async-processing, consistency-transactions]
+    title: Decouple crawling from indexing with Kafka, one partition per shard, to get commit-consistent queries
+    chosen:
+      text: "Crawled documents are published to a Kafka topic partitioned between shards, and each shard consumes one partition at its own pace, so indexing is decoupled from crawling."
+      locator: "Section: Let’s build an index"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Kafka's message order is what gives the system query consistency, and the queue lets each shard consume documents for indexing at its own pace."
+      locator: "Section: Let’s build an index"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - kafka partition per shard
+      - index in the background without blocking crawl
+      - consistent search results during pushes
+    tech: [kafka]
