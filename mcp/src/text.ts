@@ -93,6 +93,21 @@ export function queryTerms(query: string): Query {
   return { terms: terms.slice(0, MAX_QUERY_TERMS), dropped: Math.max(0, terms.length - MAX_QUERY_TERMS), tooLong };
 }
 
+/**
+ * Collapses every run of whitespace, control characters and line or paragraph separators to one space, so
+ * that card text can never start a line that looks like part of a response's own structure. \s alone
+ * misses U+0085 (next line) and the C0 separators U+001C to U+001F, which many readers treat as line breaks.
+ */
+export const flat = (text: string): string => text.replace(/[\s\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim();
+
+/**
+ * Whether a card's review.reviewed_by says that no person has reviewed it yet. The field is free text,
+ * so the test is deliberately loose: anything whose first letters are "pending", in any case and after
+ * any leading spaces, punctuation or invisible characters. Erring this way keeps the machine-checked-only
+ * warning on a card that may not need it; erring the other way would drop it from one that does.
+ */
+export const isPendingReview = (reviewedBy: string): boolean => /^[^\p{L}\p{N}]*pending/iu.test(reviewedBy);
+
 const FUZZY_MIN = 5;
 
 /** Near miss: two long terms that share almost all of the shorter one as a prefix ("idempotent", "idempotency"). */

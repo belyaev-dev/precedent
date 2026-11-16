@@ -4,17 +4,12 @@
 // - card text is printed as data. Nothing in it is interpreted, and nothing the caller sent is echoed
 //   except query words reduced to letters and digits and ids that passed a strict pattern.
 import { GROUP_ORDER, type Group, type Hit, type SearchResult } from "./search.ts";
+import { flat, isPendingReview } from "./text.ts";
 import { AXES, type AppliesFrom, type Axis, type Card, type CardRecord, type CorpusIndex, type Fact, type Tombstone } from "./types.ts";
 
 export const NOT_STATED = "not stated in the source";
 const LETTER: Record<Axis, string> = { traffic: "T", data: "D", team: "O" };
 
-/**
- * Collapses every run of whitespace, control characters and line or paragraph separators to one space, so
- * that card text can never start a line that looks like part of the response's own structure. \s alone
- * misses U+0085 (next line) and the C0 separators U+001C to U+001F, which many readers treat as line breaks.
- */
-export const flat = (text: string): string => text.replace(/[\s\p{Cc}\p{Zl}\p{Zp}]+/gu, " ").trim();
 
 const factLine = (label: string, fact: Fact | null): string => (fact ? `${label}: ${flat(fact.text)} [${flat(fact.locator)}]` : `${label}: ${NOT_STATED}`);
 
@@ -36,7 +31,7 @@ const envelopeCode = (envelope: SearchResult["envelope"]): string =>
     .join(" ");
 
 export function reviewStatus(card: Card): string {
-  return /^pending\b/i.test(card.review.reviewed_by)
+  return isPendingReview(card.review.reviewed_by)
     ? "PENDING human review (machine-checked only)"
     : `reviewed by ${flat(card.review.reviewed_by)} on ${card.review.reviewed_at}`;
 }

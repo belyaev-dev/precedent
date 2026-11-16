@@ -60,8 +60,9 @@ afterAll(() => {
 // own address so that one group's requests are not counted against another's.
 const from = (address: string): Record<string, string> => ({ "cf-connecting-ip": address });
 
-async function connect(address: string): Promise<Client> {
-  const client = new Client({ name: "precedent-e2e", version: "0.0.0" });
+/** An SDK client pinned to the 2026-07-28 protocol, or left to the SDK's default, which is the 2025 handshake. */
+async function connect(address: string, era: "modern" | "legacy"): Promise<Client> {
+  const client = new Client({ name: "precedent-e2e", version: "0.0.0" }, era === "modern" ? { versionNegotiation: { mode: { pin: "2026-07-28" } } } : {});
   await client.connect(new StreamableHTTPClientTransport(new URL(`${origin}/mcp`), { requestInit: { headers: from(address) } }));
   return client;
 }
@@ -74,16 +75,38 @@ const textOf = (result: unknown): string => {
   return content[0]!.text;
 };
 
-describe("an MCP client against the local Worker", () => {
+describe("a 2026-07-28 MCP client against the local Worker", () => {
   let client: Client;
   beforeAll(async () => {
-    client = await connect("198.51.100.1");
+    client = await connect("198.51.100.1", "modern");
   });
   afterAll(() => client?.close());
 
-  it("connects and learns what the server is", () => {
+  it("connects without a handshake and learns what the server is", () => {
+    expect(client.getProtocolEra()).toBe("modern");
     expect(client.getServerVersion()).toMatchObject({ name: "precedent", version: `0.1.0+${corpus.version}` });
     expect(client.getInstructions()).toContain(`${origin}/corpus/corpus.json`);
+    // No list-change notifications: there is nothing to subscribe to.
+    expect(client.getServerCapabilities()).toEqual({ tools: { listChanged: false } });
+  });
+
+  it("is not given a stream to hold open when it asks to subscribe", async () => {
+    const meta = { "io.modelcontextprotocol/protocolVersion": "2026-07-28", "io.modelcontextprotocol/clientInfo": { name: "precedent-e2e", version: "0.0.0" }, "io.modelcontextprotocol/clientCapabilities": {} };
+    const started = Date.now();
+    const response = await fetch(`${origin}/mcp`, {
+      method: "POST",
+      headers: { "content-type": "application/json", accept: "application/json, text/event-stream", "mcp-protocol-version": "2026-07-28", "mcp-method": "subscriptions/listen", ...from("198.51.100.3") },
+      body: JSON.stringify({ jsonrpc: "2.0", id: 41, method: "subscriptions/listen", params: { notifications: { toolsListChanged: true }, _meta: meta } }),
+      signal: AbortSignal.timeout(5000),
+    });
+    // Reading to the end only returns if the server closed the response.
+    const body = await response.text();
+    expect(Date.now() - started).toBeLessThan(2000);
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-length")).not.toBeNull();
+    expect(body).toContain('"method":"notifications/subscriptions/acknowledged","params":{"notifications":{}');
+    expect(body).toContain('"resultType":"complete"');
+    expect(body).not.toContain("keepalive");
   });
 
   it("lists the three read-only tools", async () => {
@@ -136,6 +159,17 @@ describe("an MCP client against the local Worker", () => {
   });
 });
 
+describe("the SDK's client with its default 2025 handshake against the local Worker", () => {
+  it("connects, lists and calls", async () => {
+    const client = await connect("198.51.100.4", "legacy");
+    expect(client.getProtocolEra()).toBe("legacy");
+    expect(client.getServerCapabilities()).toEqual({ tools: { listChanged: false } });
+    expect((await client.listTools()).tools).toHaveLength(3);
+    expect(textOf(await client.callTool({ name: "precedent_facets", arguments: {} }))).toContain(`Precedent corpus ${corpus.version}.`);
+    await client.close();
+  });
+});
+
 describe("a 2025-era client against the local Worker", () => {
   const headers = { "content-type": "application/json", accept: "application/json, text/event-stream", ...from("198.51.100.2") };
   const send = async (message: unknown, extra: Record<string, string> = {}) => {
@@ -168,6 +202,14 @@ describe("a 2025-era client against the local Worker", () => {
     const large = await send({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name: "precedent_search", arguments: { query: "x".repeat(40_000) } } });
     expect(large.response.status).toBe(413);
     expect(large.message.error.message).toContain(`${origin}/corpus/corpus.json`);
+
+    // A browser client on an allowed origin can read both refusals, as it can read an answer.
+    const answered = await send({ jsonrpc: "2.0", id: 3, method: "tools/list" }, { "mcp-protocol-version": "2025-06-18", origin: "http://localhost:5173" });
+    expect(answered.response.headers.get("access-control-allow-origin")).toBe("*");
+    for (const { response } of [batch, large]) {
+      expect(response.headers.get("access-control-allow-origin")).toBe(answered.response.headers.get("access-control-allow-origin"));
+      expect(response.headers.get("access-control-expose-headers")).toBe(answered.response.headers.get("access-control-expose-headers"));
+    }
   });
 });
 
@@ -220,6 +262,8 @@ describe("rate limiting on the local Worker", () => {
     expect(refusal, `statuses: ${statuses.join(" ")}`).toBeDefined();
     expect(statuses.filter((status) => status === 200).length).toBeGreaterThanOrEqual(100);
     expect(refusal!.headers.get("retry-after")).toBe("60");
+    expect(refusal!.headers.get("access-control-allow-origin")).toBe("*");
+    expect(refusal!.headers.get("access-control-expose-headers")).toBe("Retry-After");
     expect(((await refusal!.json()) as { error: { message: string } }).error.message).toBe(
       `Too many requests from this address; wait a minute and retry. The whole corpus is a static file with no request limits: ${origin}/corpus/corpus.json`,
     );
