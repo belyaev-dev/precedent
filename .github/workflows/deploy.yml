@@ -16,44 +16,64 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-# One deploy at a time, in order. A queued run is not cancelled: the newest commit must end up live.
+# One deploy at a time. Runs do not necessarily start in commit order, and an old run can be re-run, so
+# the job itself refuses to deploy anything but the current tip of main.
 concurrency:
   group: deploy-production
   cancel-in-progress: false
 jobs:
   production:
-    # Never from a fork or a branch: the token below is only ever used on main of this repository.
     if: github.repository == 'belyaev-dev/precedent' && github.ref == 'refs/heads/main'
+    # The Cloudflare credentials are secrets of this environment, which only runs for the main branch.
+    # A workflow on any other branch cannot read them, whatever it contains.
+    environment: production
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Only the current tip of main is deployed
+        id: tip
+        run: |
+          tip=$(git ls-remote origin refs/heads/main | cut -f1)
+          if [ "$tip" = "$GITHUB_SHA" ]; then echo "current=true" >> "$GITHUB_OUTPUT"; else
+            echo "current=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::main is at $tip, this run is $GITHUB_SHA. Skipping: the run for the newer commit deploys."
+          fi
+      - if: steps.tip.outputs.current == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: |
             package-lock.json
             mcp/package-lock.json
-      - run: npm ci
-      - run: npm run check
-      - run: npm ci
+      - if: steps.tip.outputs.current == 'true'
+        run: npm ci
+      - if: steps.tip.outputs.current == 'true'
+        run: npm run check
+      - if: steps.tip.outputs.current == 'true'
+        run: npm ci
         working-directory: mcp
-      - run: npm run typecheck
+      - if: steps.tip.outputs.current == 'true'
+        run: npm run typecheck
         working-directory: mcp
-      - run: npm test
+      - if: steps.tip.outputs.current == 'true'
+        run: npm test
         working-directory: mcp
-      - name: Deploy
+      - if: steps.tip.outputs.current == 'true'
+        name: Deploy
         run: npx wrangler deploy --env production
         working-directory: mcp
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-      - name: The live endpoint serves the corpus just built
+          BUILD_COMMIT: ${{ github.sha }}
+      - if: steps.tip.outputs.current == 'true'
+        name: The live endpoint serves this build
         run: |
           expected=$(node -e "console.log(JSON.parse(require('fs').readFileSync('mcp/public/corpus/corpus.json','utf8')).corpus_version)")
-          for attempt in 1 2 3 4 5 6; do
+          for attempt in 1 2 3 4 5 6 7 8 9 10 11 12; do
             sleep 10
-            if python3 scripts/live-check.py https://mcp.precedents.dev --expect-version "$expected"; then exit 0; fi
+            if python3 scripts/live-check.py https://mcp.precedents.dev --expect-version "$expected" --expect-commit "$GITHUB_SHA"; then exit 0; fi
           done
           exit 1

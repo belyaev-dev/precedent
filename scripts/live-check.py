@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Checks a deployed Precedent endpoint from outside. Usage: live-check.py <base url> [--expect-version <hash>]
+"""Checks a deployed Precedent endpoint from outside. Usage: live-check.py <base url> [--expect-version <hash>] [--expect-commit <sha>]
 
 Fails unless the static corpus downloads whole and holds cards, and the MCP endpoint returns real
-records for a fetch and a search. With --expect-version it also fails unless that is the corpus version
-served, which is how a deploy confirms it took effect. Standard library only.
+records for a fetch and a search. With --expect-version and --expect-commit it also fails unless that corpus
+version and that build are what is served, which is how a deploy confirms it took effect. Standard library only.
 """
 import json
 import re
@@ -12,7 +12,21 @@ import urllib.error
 import urllib.request
 
 base = sys.argv[1].rstrip("/")
-expected = sys.argv[sys.argv.index("--expect-version") + 1] if "--expect-version" in sys.argv else None
+
+
+def option(name, pattern):
+    """The value after `name`, or None when the flag is absent. A flag given with a bad value is an error."""
+    if name not in sys.argv:
+        return None
+    index = sys.argv.index(name) + 1
+    value = sys.argv[index] if index < len(sys.argv) else ""
+    if not re.fullmatch(pattern, value):
+        sys.exit(f"FAIL: {name} needs a value matching {pattern}, got {value!r}")
+    return value
+
+
+expected = option("--expect-version", r"[0-9a-f]{12}")
+expected_commit = option("--expect-commit", r"[0-9a-f]{40}")
 ID = re.compile(r"^[a-z0-9]+(-[a-z0-9]+)*$")
 
 
@@ -58,7 +72,7 @@ version = corpus.get("corpus_version")
 cards = corpus.get("cards")
 if not (isinstance(version, str) and re.fullmatch(r"[0-9a-f]{12}", version)):
     fail(f"corpus_version is not a 12-character hash: {version!r}")
-if expected and version != expected:
+if expected is not None and version != expected:
     fail(f"static corpus is version {version}, expected {expected}")
 if not (isinstance(cards, list) and len(cards) >= 10):
     fail(f"expected at least 10 cards, found {len(cards) if isinstance(cards, list) else type(cards).__name__}")
@@ -70,6 +84,15 @@ for card in live:
     if not (card.get("records") and card.get("source", {}).get("url") and card.get("architecture", {}).get("text")):
         fail(f"card {card['id']} is missing records, a source or an architecture")
 print(f"static corpus: {len(text.encode())} bytes, version {version}, {len(cards)} cards ({len(live)} live)")
+
+if expected_commit is not None:
+    status, text = fetch("/corpus/build.json")
+    if status != 200:
+        fail(f"build.json answered HTTP {status}")
+    build = json.loads(text)
+    if build.get("commit") != expected_commit or build.get("corpus_version") != version:
+        fail(f"served build is {build}, expected commit {expected_commit} with corpus {version}")
+    print(f"build: {expected_commit[:12]}")
 
 # 2. The endpoint introduces itself and serves the same corpus version.
 info = rpc({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "live-check", "version": "0"}}})
