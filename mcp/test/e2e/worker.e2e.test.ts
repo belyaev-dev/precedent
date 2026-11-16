@@ -1,8 +1,10 @@
 // Speaks MCP to the Worker running under `wrangler dev`: the real bundle, the real static assets,
 // the local emulation of the rate limiting binding. Nothing here touches Cloudflare.
 import { spawn, type ChildProcess } from "node:child_process";
+import { mkdtempSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -12,6 +14,9 @@ const mcpDir = resolve(fileURLToPath(import.meta.url), "../../..");
 let origin: string;
 let dev: ChildProcess;
 let output = "";
+// The local rate limiter keeps its counters on disk. A fresh directory per run stops one run's
+// requests from counting against the next when the suite is run twice within a minute.
+const stateDir = mkdtempSync(join(tmpdir(), "precedent-e2e-"));
 
 function freePort(): Promise<number> {
   return new Promise((done, fail) => {
@@ -27,7 +32,7 @@ function freePort(): Promise<number> {
 beforeAll(async () => {
   const [port, inspectorPort] = [await freePort(), await freePort()];
   origin = `http://127.0.0.1:${port}`;
-  dev = spawn(resolve(mcpDir, "node_modules/.bin/wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", String(inspectorPort)], {
+  dev = spawn(resolve(mcpDir, "node_modules/.bin/wrangler"), ["dev", "--ip", "127.0.0.1", "--port", String(port), "--inspector-port", String(inspectorPort), "--persist-to", stateDir], {
     cwd: mcpDir,
     detached: true,
     stdio: ["ignore", "pipe", "pipe"],
@@ -48,6 +53,7 @@ beforeAll(async () => {
 afterAll(() => {
   // wrangler runs workerd as a child; stop the whole group.
   if (dev?.pid) process.kill(-dev.pid, "SIGTERM");
+  rmSync(stateDir, { recursive: true, force: true });
 });
 
 // The local rate limiter counts per client address, as production does. Each group of tests uses its
@@ -90,7 +96,7 @@ describe("an MCP client against the local Worker", () => {
     const text = textOf(await client.callTool({ name: "precedent_search", arguments: { query: "background jobs in postgres instead of redis", traffic: 0, data: 0, team: 0 } }));
     expect(text).toContain(`Precedent corpus ${corpus.version}.`);
     expect(text).toContain("Your envelope: T0 D0 O0.");
-    expect(text).toMatch(/Coverage: \d+ matched; \d+ at your scale, \d+ at a different scale, \d+ of unknown scale, \d+ out of envelope\. Showing \d+\./);
+    expect(text).toMatch(/Coverage: \d+ matched; \d+ at your scale, \d+ at a different scale, \d+ of unknown scale, \d+ with a floor not checked, \d+ out of envelope\. Showing \d+\./);
     expect(text).toContain("cite: tosbourn-2023-client-rails-jobs#d1 | Unnamed client of Tosbourn Ltd, 2023 | https://tosbourn.com/replacing-sidekiq-with-goodjob/ | corpus ");
     expect(text).toContain("UNKNOWN SCALE:");
   });
@@ -204,21 +210,23 @@ describe("rate limiting on the local Worker", () => {
       });
     const statuses: number[] = [];
     let refusal: Response | undefined;
-    for (let i = 0; i < 45 && !refusal; i++) {
+    for (let i = 0; i < 170 && !refusal; i++) {
       const response = await ping("198.51.100.99");
       statuses.push(response.status);
       if (response.status === 429) refusal = response;
       else await response.arrayBuffer();
     }
-    // wrangler.jsonc allows 30 a minute; the binding is approximate, so only the order of magnitude is asserted.
+    // wrangler.jsonc allows 120 a minute; the binding is approximate, so only the order of magnitude is asserted.
     expect(refusal, `statuses: ${statuses.join(" ")}`).toBeDefined();
-    expect(statuses.filter((status) => status === 200).length).toBeGreaterThanOrEqual(25);
+    expect(statuses.filter((status) => status === 200).length).toBeGreaterThanOrEqual(100);
     expect(refusal!.headers.get("retry-after")).toBe("60");
     expect(((await refusal!.json()) as { error: { message: string } }).error.message).toBe(
       `Too many requests from this address; wait a minute and retry. The whole corpus is a static file with no request limits: ${origin}/corpus/corpus.json`,
     );
 
     expect((await ping("198.51.100.100")).status).toBe(200);
+    // Another address in the refused client's IPv6 /64 would be refused with it; here, a different /64 is not.
+    expect((await ping("2001:db8:1:2::1")).status).toBe(200);
     expect((await fetch(`${origin}/corpus/corpus.json`, { headers: from("198.51.100.99") })).status).toBe(200);
   });
 });

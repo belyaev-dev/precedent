@@ -25,7 +25,10 @@ function readCards(dir: string): (Card | Tombstone)[] {
  * schema/examples. Between them they cover what the real corpus does not yet contain: floors,
  * a withdrawn card, a disputed card, a reversed decision and hostile text.
  */
+export function fixtureCards(): (Card | Tombstone)[] {
+  return [...readCards(join(here, "fixtures/cards")), ...readCards(join(repoRoot, "schema/examples"))];
+}
+
 export function fixtureIndex(): CorpusIndex {
-  const cards = [...readCards(join(here, "fixtures/cards")), ...readCards(join(repoRoot, "schema/examples"))];
-  return buildIndex(cards, FIXTURE_VERSION, corpus.vocabulary);
+  return buildIndex(fixtureCards(), FIXTURE_VERSION, corpus.vocabulary);
 }

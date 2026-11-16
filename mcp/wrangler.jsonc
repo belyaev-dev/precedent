@@ -15,12 +15,15 @@
       "name": "RATE_LIMITER",
       // Any integer not already used for another rate limit in the account.
       "namespace_id": "1001",
-      // Per client address, per Cloudflare location, approximate. Period must be 10 or 60 seconds.
-      "simple": { "limit": 30, "period": 60 }
+      // Per client address (per /64 for IPv6), per Cloudflare location, approximate. Period must be 10 or 60
+      // seconds. 120 a minute is a brake on a runaway loop, set high enough for a dozen agent sessions behind
+      // one shared address; the README says how it was chosen. It does not protect the daily request quota.
+      "simple": { "limit": 120, "period": 60 }
     }
   ],
-  // Keep the Worker's own count lines (no query text, no addresses). Do not record request metadata.
-  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  // Keep the Worker's own count lines (no query text, no addresses). Do not record request metadata,
+  // and keep tracing off explicitly, so that a later compatibility date cannot switch it on.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false }, "traces": { "enabled": false } },
   "workers_dev": true
   // For a custom domain, add the route and tell the endpoint which hostnames it answers on:
   // "routes": [{ "pattern": "mcp.example.org", "custom_domain": true }],

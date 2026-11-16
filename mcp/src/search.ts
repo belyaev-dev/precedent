@@ -28,11 +28,13 @@ export interface SearchParams extends Envelope {
  * - different_scale: a tier the card does have differs from the caller's.
  * - unknown_scale: nothing contradicts the caller's envelope, but the card has no tier on at least one
  *   axis the caller gave. Unknown is not small: this is never a match for the caller's tier.
+ * - floor_unchecked: a decision whose applies_from floor names an axis the caller gave no tier for. The floor
+ *   could not be checked, so the decision is kept out of every scale group, whatever its card's tiers.
  * - out_of_envelope: a decision whose applies_from floor is above the caller's envelope.
  * - no_envelope: the caller gave no tiers, so nothing was compared.
  */
-export type Group = "at_scale" | "different_scale" | "unknown_scale" | "out_of_envelope" | "no_envelope";
-export const GROUP_ORDER: readonly Group[] = ["at_scale", "different_scale", "unknown_scale", "out_of_envelope", "no_envelope"];
+export type Group = "at_scale" | "different_scale" | "unknown_scale" | "floor_unchecked" | "out_of_envelope" | "no_envelope";
+export const GROUP_ORDER: readonly Group[] = ["at_scale", "different_scale", "unknown_scale", "floor_unchecked", "out_of_envelope", "no_envelope"];
 
 export interface ScaleFit {
   group: Group;
@@ -60,6 +62,12 @@ export interface SearchResult {
   words: string[];
   unknownWords: string[];
   droppedTerms: number;
+  /** Words over the length limit, which were not searched. */
+  tooLongWords: number;
+  /** The caller sent a query with text in it. */
+  queryGiven: boolean;
+  /** A query was given and nothing in it could be searched. Such a search matches nothing, whatever the filters. */
+  noUsableWords: boolean;
   /** Tech tags the caller filtered on that no card uses. */
   unknownTech: string[];
   envelope: Envelope;
@@ -94,6 +102,7 @@ export function scaleFit(card: Card, record: CardRecord | null, envelope: Envelo
   }
 
   if (fit.floorAbove.length) fit.group = "out_of_envelope";
+  else if (fit.floorUnchecked.length) fit.group = "floor_unchecked";
   else if (given.length === 0) fit.group = "no_envelope";
   else if (fit.differs.length) fit.group = "different_scale";
   else if (fit.unknown.length) fit.group = "unknown_scale";
@@ -119,7 +128,11 @@ export function search(index: CorpusIndex, params: SearchParams): SearchResult {
   const limit = Math.min(MAX_LIMIT, Math.max(1, Math.trunc(params.limit ?? DEFAULT_LIMIT)));
   const kinds = params.kind?.length ? params.kind : DEFAULT_KINDS;
 
-  const { terms, dropped } = queryTerms(params.query ?? "");
+  // An absent or blank query means "filters only". A query with text in it but nothing searchable
+  // (punctuation, common words) must not fall through to that: it matches nothing.
+  const queryGiven = (params.query ?? "").trim().length > 0;
+  const { terms, dropped, tooLong } = queryTerms(params.query ?? "");
+  const noUsableWords = queryGiven && terms.length === 0;
   const score = new Float64Array(total);
   const seen = new Uint16Array(total); // one bit per query term
   const unknownWords: string[] = [];
@@ -158,11 +171,11 @@ export function search(index: CorpusIndex, params: SearchParams): SearchResult {
   };
 
   const unknownTech = (params.tech ?? []).filter((tag) => !Object.hasOwn(index.facets.tech, tag));
-  const counts: Record<Group, number> = { at_scale: 0, different_scale: 0, unknown_scale: 0, out_of_envelope: 0, no_envelope: 0 };
+  const counts: Record<Group, number> = { at_scale: 0, different_scale: 0, unknown_scale: 0, floor_unchecked: 0, out_of_envelope: 0, no_envelope: 0 };
   let excludedNoFootprint = 0;
   const hits: Hit[] = [];
 
-  for (let i = 0; i < total; i++) {
+  for (let i = 0; i < total && !noUsableWords; i++) {
     if (terms.length > 0 && bits(seen[i]!) < need) continue;
     const doc = index.docs[i]!;
     if (!kinds.includes(doc.kind)) continue;
@@ -197,6 +210,9 @@ export function search(index: CorpusIndex, params: SearchParams): SearchResult {
     words: terms.map((t) => t.word),
     unknownWords,
     droppedTerms: dropped,
+    tooLongWords: tooLong,
+    queryGiven,
+    noUsableWords,
     unknownTech,
     envelope,
     matched: hits.length,
