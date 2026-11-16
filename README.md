@@ -10,7 +10,7 @@ It exists because agents design from memory, and memory produces the interview a
 
 A **card** is one YAML file in [`cards/`](cards/). It describes one system at one point in time, as reported by one public source. A source that covers several periods or scales becomes one card per period. Each card holds up to eight **records**, and the record is what an agent retrieves and cites:
 
-- A **decision** record: what was chosen, what was rejected, the measured pain that forced the choice, the simpler setup that worked before, the cost paid, and the outcome.
+- A **decision** record: what was chosen, what was rejected, the measured pain that forced the choice, any other reason the source gives, the simpler setup that worked before, the cost paid, and the outcome.
 - A **failure** record: the trigger, the mechanism that turned it into an outage, why the defences did not hold, the impact, and the fix.
 
 Records are cited as `<card id>#<record id>`, for example `acme-2023-orders#d1`. Ids are permanent. Because a card can be corrected, every export and search result will carry the corpus version (the git commit), and a citation that has to stay checkable should include it.
@@ -33,6 +33,8 @@ Sources report scale in numbers that cannot be compared directly (monthly users,
 | 5 | 100,000 or more | 100 TB or more | |
 
 A decision record may also carry `applies_from`, an advisory floor below which the decision should not be copied. A floor is either stated by the source, in which case the card keeps the exact threshold and where it is stated, or it is the reviewer's judgment with a written rationale. The scale a system happened to run at is never treated as a floor on its own, and some records (idempotent delivery, restore testing) have no floor at all.
+
+Small systems rarely publish numbers at all; what their authors do say is "one VM" or "a single database". So a card also records the **footprint** the source states: single node, single database, partitioned, or multi-region. For a small system that is often the only size signal there is, and it is what makes boring setups findable.
 
 Many post-mortems give no scale figures. Their records are still searchable; they are returned in a separate group labelled as unknown scale, never as a match for the caller's tier.
 

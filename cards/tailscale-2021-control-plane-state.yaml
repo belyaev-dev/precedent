@@ -1,0 +1,123 @@
+schema: 1
+id: tailscale-2021-control-plane-state
+title: Tailscale keeps control-plane state in one rewritten JSON file, then moves it to etcd
+org: Tailscale
+system: Control plane (CONTROL)
+architecture:
+  text: Tailscale's coordination server, CONTROL, runs as one Go process on one VM. Its data model was held in memory behind one mutex and persisted by writing the whole structure to disk as JSON on every edit, until the move to etcd described here.
+  locator: "Section: A bit of backstory from David"
+as_of: null
+evidence: production
+workloads: [control-plane]
+# Single node is what the source states for the process and for the JSON-file era. It does not say
+# where etcd runs after the migration.
+footprint:
+  shape: single-node
+  locator: "Near: a single Go process on a single VM"
+scale:
+  # The post gives no request rate, no customer count and no engineer count. The 150MB figure is the
+  # size of the JSON file, which may be only one of two halves (the other half lived on tmpfs).
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: peak size of the JSON database file
+      value: 150
+      unit: MB
+      qualifier: the file, which may be only the durable half of the state; ephemeral data was kept separately on tmpfs
+      locator: "Section: Brad joins a startup"
+source:
+  url: https://tailscale.com/blog/an-unlikely-database-migration
+  archive_url: null
+  title: An unlikely database migration
+  publisher: Tailscale
+  author: Brad Fitzpatrick and David Crawshaw
+  published: "2021-01-13"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, schema-data-migration]
+    title: Hold all state in memory behind one lock and rewrite a single JSON file on every change
+    chosen:
+      text: The object holding all data was wrapped in a mutex, every access went through it, and each edit marshalled the whole structure to JSON and wrote it to disk. The author calls it persistence in about 20 lines of Go.
+      locator: "Section: A bit of backstory from David"
+    rejected:
+      - option: A SQL data model (the earliest prototypes used SQLite)
+        reason: Early designs changed the SQL data model weekly, each change needing a great deal of glue code, and the author was not ready to fix a data model and write it properly in SQL.
+        locator: "Section: A bit of backstory from David"
+    forcing_condition:
+      text: A customer wanted to try the product a couple of weeks after the author had switched to an experimental in-memory data model, so that model needed persistence quickly.
+      locator: "Section: A bit of backstory from David"
+    rationale:
+      text: The data model was still changing fast; weekly SQL reorganisations had been tedious, the in-memory model made iteration much quicker, and the author did not want to commit to a SQL schema yet.
+      locator: "Section: A bit of backstory from David"
+    worked_before: null
+    cost_paid:
+      text: Write latency grew over time until commits took nearly a second and sometimes longer, felt most when editing networks in the admin console.
+      locator: "Section: The migration"
+    outcome:
+      text: It was easy to test and it worked, though both authors knew it would not scale. It slowed steadily; the file peaked at 150MB and was rewritten as fast as disk I/O allowed, despite fast NVMe drives and moving ephemeral data to tmpfs.
+      locator: "Section: Brad joins a startup"
+    applies_from: null
+    curator_notes:
+      - No customer, tenant or request counts are given, so how much load the single process carried is unknown. The 150MB figure is one file size, not a data tier.
+    aliases:
+      - json file as database
+      - single file database
+      - rewrite whole file on every write
+      - in-memory state with mutex
+      - flat file persistence
+      - when to move off a flat file
+    tech: [go, json]
+  - id: d2
+    kind: decision
+    topics: [datastore-choice, schema-data-migration]
+    title: Replace the rewritten JSON file with etcd as a minimal database for a single-process control plane
+    chosen:
+      text: Moved the data model onto etcd as a minimally-viable database, taking care to use only etcd features that could be mapped onto CockroachDB.
+      locator: "Section: What comes after JSONMutexDB?"
+    rejected:
+      - option: SQLite
+        reason: Crawshaw's preferred database and probably adequate, as a brief control outage only blocks new node logins, but he could not justify moving a fast-growing service onto it.
+        locator: "Section: What comes after JSONMutexDB?"
+      - option: MySQL or PostgreSQL
+        reason: Their open-source high-availability options are lagging replicas or primaryless clusters with surprising transaction semantics, and a separate database server would make tests slow and require Docker.
+        locator: "Section: What comes after JSONMutexDB?"
+      - option: CockroachDB
+        reason: Promising, but young for a database, and the author worried about coming to depend on features that would be hard to leave.
+        locator: "Section: What comes after JSONMutexDB?"
+    forcing_condition:
+      text: The JSON file reached a peak of 150MB and was being written as quickly as disk I/O allowed, and the system kept getting slower.
+      locator: "Section: Brad joins a startup"
+    rationale:
+      text: The data model was a set of maps under one big lock, which maps naturally onto a key-value store; etcd let the lock become read-write and writes cover only changed data, and as a Go library it runs inside tests without Docker. A good Jepsen report also helped.
+      locator: "Section: What comes after JSONMutexDB?"
+    worked_before:
+      text: One JSON file rewritten under a single process-wide lock, on fast NVMe drives with the data split into an important half and an ephemeral half on tmpfs, held until the file reached its 150MB peak.
+      locator: "Section: Brad joins a startup"
+    cost_paid:
+      text: Without SQL's indexes, the team spent what it reckons was two or three weeks of engineering on in-memory indexes that are transaction-aware, needed so that several control processes can run at once later.
+      locator: "Section: One snag: indexes"
+    outcome:
+      text: Commit latency dropped sharply once the JSON writes were turned off; writes went from nearly a second, sometimes worse, to milliseconds. Both systems ran in parallel for a while before the old one was dropped.
+      locator: "Section: The migration"
+    applies_from: null
+    curator_notes:
+      - The authors note their data is small enough to fit in server memory and read far more than written, which is what their etcd client relies on. Check those two properties hold before copying the approach.
+    aliases:
+      - etcd instead of postgres
+      - key value store for a small data set
+      - whole data set fits in memory
+      - single process database
+      - replace file persistence
+      - slow writes rewriting whole file
+    tech: [etcd, go, json]

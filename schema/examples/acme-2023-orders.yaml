@@ -11,6 +11,9 @@ architecture:
 as_of: "2023-05"
 evidence: production
 workloads: [multi-tenant-data, crud-app]
+footprint:
+  shape: partitioned
+  locator: "Section: The design"
 scale:
   traffic:
     tier: 3
@@ -72,6 +75,9 @@ records:
     forcing_condition:
       text: The single primary peaked at 4,000 writes per second and autovacuum could not keep up on a 6 TB table.
       locator: "Section: Why we sharded"
+    rationale:
+      text: The team preferred to keep operating the database it already knew.
+      locator: "Section: Options we considered"
     worked_before:
       text: One primary with two read replicas served the product from 2019 to 2023.
       locator: "Section: Background"

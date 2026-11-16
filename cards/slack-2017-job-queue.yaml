@@ -1,0 +1,171 @@
+schema: 1
+id: slack-2017-job-queue
+title: Slack puts Kafka in front of its Redis job queue after Redis ran out of memory
+org: Slack
+system: Job queue
+architecture:
+  text: "Jobs are queued in Redis clusters and executed by worker pools. Slack added Kafka in front of Redis as a durable buffer rather than replacing Redis, keeping the existing enqueue and dequeue interfaces."
+  locator: "Section: Incremental Change or Full Rewrite?"
+as_of: "2017"
+evidence: production
+workloads: [job-queue]
+footprint:
+  shape: partitioned
+  locator: "Near: selects one of the configured Redis hosts based"
+scale:
+  # Traffic comes from the busiest-day peak the post states for the system at
+  # publication (late 2017). The post gives no figures for the time of the outage.
+  # No stored-data size and no team size is given, so those axes stay empty.
+  traffic:
+    tier: 4
+    basis: stated
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: job rate on the busiest days
+      value: 33000
+      unit: jobs per second
+      qualifier: peak on the busiest days; whole job queue; at publication, not at the outage
+      locator: "Near: at a peak rate of 33,000 per second"
+    - axis: other
+      name: jobs processed on the busiest days
+      value: 1400000000
+      unit: jobs per day
+      qualifier: over; busiest days; whole job queue; at publication
+      locator: "Near: processes over 1.4 billion jobs at a peak"
+    - axis: other
+      name: Kafka brokers
+      value: 16
+      unit: brokers
+      qualifier: the new Kafka cluster
+      locator: "Section: Kafka Cluster Setup"
+    - axis: other
+      name: Redis clusters the new path was verified end to end against
+      value: 50
+      unit: clusters
+      qualifier: at rollout
+      locator: "Section: Production Rollout"
+    - axis: other
+      name: Kafka partitions covered by heartbeat canaries
+      value: 1600
+      unit: partitions
+      qualifier: 50 topics of 32 partitions each, at rollout
+      locator: "Section: Production Rollout"
+source:
+  url: https://slack.engineering/scaling-slacks-job-queue/
+  archive_url: null
+  title: Scaling Slack's Job Queue
+  publisher: Slack Engineering
+  author: Saroj Yadav, Matthew Smillie, Mike Demmer, Tyler Johnson
+  published: "2017-12-06"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [load-shedding-backpressure, async-processing, dependency-failure]
+    title: Database contention filled Redis memory, and a full Redis could neither accept nor release jobs
+    trigger:
+      text: "Resource contention in the database layer slowed the execution of jobs."
+      locator: "Near: Resource contention in our database layer led to"
+    mechanism:
+      text: "The slowdown in job execution caused Redis to reach its maximum configured memory limit. With no free memory, new jobs could not be enqueued. Dequeuing also needed some free memory, so the queue stayed locked up even after the database contention was resolved."
+      locator: "Near: Redis to reach its maximum configured memory limit"
+    why_defences_failed:
+      text: "Redis had little memory headroom, and adding workers raised polling load on Redis, so more execution capacity could overload an already struggling instance. Dequeuing also took work proportional to queue length, so long queues were harder to empty."
+      locator: "Section: Architectural Problems"
+    impact:
+      text: "While enqueues were refused, every Slack feature relying on the job queue failed, and getting the queue moving again took a great deal of manual work."
+      locator: "Near: all the Slack operations that depend on the"
+    fix:
+      text: "Kafka was added in front of Redis as durable storage. A relay writes jobs to Redis under rate limits that can be set to match the dequeue rate or paused, so a build-up no longer fills Redis."
+      locator: "Section: Conclusion"
+    curator_notes:
+      - The post dates the outage to about a year before publication (around late 2016). The scale figures on this card are stated in the present tense at publication; the post gives no job rates for the time of the outage.
+    aliases:
+      - redis out of memory job queue
+      - cannot dequeue when redis is full
+      - job backlog exhausts redis
+      - enqueue failures during queue buildup
+      - queue locked up after outage
+      - redis maxmemory job queue
+    tech: [redis, kafka]
+  - id: d1
+    kind: decision
+    topics: [async-processing, load-shedding-backpressure]
+    title: Added Kafka in front of the Redis job queue instead of replacing Redis
+    chosen:
+      text: "Put Kafka ahead of the existing Redis queues as a durable buffer, leaving the application's existing enqueue and dequeue interfaces in place."
+      locator: "Section: Incremental Change or Full Rewrite?"
+    rejected:
+      - option: Replace Redis with Kafka altogether
+        reason: "It would have meant significant changes to the application logic for scheduling, executing and de-duplicating jobs; the team preferred a minimum viable change."
+        locator: "Section: Incremental Change or Full Rewrite?"
+      - option: A complete ground-up rewrite of the job queue
+        reason: "A series of incremental changes let the team focus on the most critical problems and gain production experience with each new component."
+        locator: "Section: Incremental Change or Full Rewrite?"
+      - option: Keep scaling the existing Redis-only system
+        reason: "The post-mortem of the outage concluded that this was untenable and that more fundamental work was needed."
+        locator: "Section: Architectural Problems"
+    forcing_condition:
+      text: "Write availability could not be guaranteed during queue build-up: if workers dequeued more slowly than jobs were enqueued, Redis would run out of memory and stop accepting jobs, which at Slack's scale could happen very quickly."
+      locator: "Section: Incremental Change or Full Rewrite?"
+    rationale:
+      text: "The team preferred small steps: fix the most critical problems first and gain production experience with each new component."
+      locator: "Section: Incremental Change or Full Rewrite?"
+    worked_before:
+      text: "The Redis-based queue dated back to Slack's earliest days and carried growth of orders of magnitude, scaled each time CPU, memory or network limits were hit, with the original architecture mostly intact."
+      locator: "Near: dates back to Slack's earliest days"
+    cost_paid:
+      text: "A second runtime in the path: the relay, written in Go, decodes and re-encodes JSON produced by PHP, and default escaping differences between Go and PHP made the same data serialise differently, a problem the PHP-only system never had."
+      locator: "Section: Data Encoding"
+    outcome:
+      text: "The authors call it a great success at protecting against Redis memory exhaustion: when enqueues outrun dequeues, jobs now wait in Kafka while rate limits are adjusted or enqueues to Redis paused. It also gave configurable rate limits and durable storage."
+      locator: "Section: Conclusion"
+    applies_from: null
+    curator_notes:
+      - The post presents this as the first step of a larger plan (a new scheduler, execution decoupled from Redis). Only the Kafka buffer is reported as done.
+    aliases:
+      - durable buffer in front of redis
+      - kafka as a buffer for a job queue
+      - queue write availability
+      - enqueue backpressure
+      - minimum viable change to a queue
+    tech: [kafka, redis]
+  - id: d2
+    kind: decision
+    topics: [delivery-idempotency, consistency-transactions]
+    title: Enqueue path acknowledges after the Kafka leader only, trading a small risk of lost jobs for latency
+    chosen:
+      text: "The enqueue service writes each job to Kafka synchronously but waits only for the partition leader to acknowledge it, not for replication to other brokers."
+      locator: "Near: we only wait for the leader to acknowledge"
+    rejected:
+      - option: Wait for replication to other brokers before acknowledging
+        reason: "Leader-only acknowledgement gives the lowest latency possible; the authors are considering an option for critical jobs to wait for stronger guarantees."
+        locator: "Near: we only wait for the leader to acknowledge"
+    forcing_condition: null
+    rationale:
+      text: "The enqueue service was designed to favour availability over consistency and to keep enqueue latency as low as possible; the authors judge the resulting loss risk acceptable for most of Slack's jobs."
+      locator: "Near: A bias towards availability over consistency"
+    worked_before: null
+    cost_paid:
+      text: "Jobs can be lost if a broker host fails unexpectedly before the job has been copied to other brokers; the authors call the risk small."
+      locator: "Near: does create a small risk of lost jobs"
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - The post gives no measured loss rate for this window and reports no outcome specific to this choice.
+    aliases:
+      - leader only acknowledgement
+      - kafka acks 1
+      - enqueue latency versus durability
+      - lost jobs on broker failure
+      - availability over consistency queue
+    tech: [kafka]

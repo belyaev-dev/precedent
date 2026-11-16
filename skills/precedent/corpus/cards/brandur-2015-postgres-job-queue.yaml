@@ -1,0 +1,158 @@
+schema: 1
+id: brandur-2015-postgres-job-queue
+title: A long-running transaction stalls a Postgres job queue
+org: Not named in the source (the author's employer)
+system: Postgres-backed job queue (Queue Classic, then Que)
+architecture:
+  text: "A job queue kept in a Postgres table, run first on the Queue Classic library and then on Que, whose workers lock jobs with Postgres advisory locks."
+  locator: "Section: Locking algorithms"
+as_of: null
+evidence: production
+workloads: [job-queue]
+footprint: null
+scale:
+  # Every figure in the post comes from the author's test bench, not from the
+  # production system, and none is a traffic, data or team size for it.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: job churn through the jobs table in the simulation
+      value: 50
+      unit: jobs per second
+      qualifier: roughly; test bench simulation, not production
+      locator: "Near: roughly 50 jobs a second here"
+    - axis: other
+      name: time to lock a job in stable operation
+      value: 0.01
+      unit: seconds
+      qualifier: stated as under this value; test bench
+      locator: "Section: Slow lock time"
+    - axis: other
+      name: time to lock a job as the oldest transaction ages
+      value: 0.1
+      unit: seconds
+      qualifier: at times and above; test bench
+      locator: "Section: Slow lock time"
+    - axis: other
+      name: dead rows in the jobs table at the end of the run
+      value: 100000
+      unit: rows
+      qualifier: approaching; test bench
+      locator: "Section: Dead tuples"
+    - axis: other
+      name: jobs queued one hour into a long transaction, unpatched Que
+      value: 60000
+      unit: jobs
+      qualifier: test bench chart, vanilla Que
+      locator: "Near: Number of jobs in the queue on vanilla"
+    - axis: other
+      name: jobs queued one hour in, Que patched to reuse the last job id
+      value: 30000
+      unit: jobs
+      qualifier: test bench chart, patched Que on the same test database
+      locator: "Near: 30k one hour in"
+source:
+  url: https://brandur.org/postgres-queues
+  archive_url: null
+  title: Postgres Job Queues & Failure By MVCC
+  publisher: brandur.org (the author's personal blog)
+  author: Brandur
+  published: "2015-05-18"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [consistency-transactions, async-processing]
+    title: Keep jobs in Postgres so an enqueue commits or rolls back with the work that created it
+    chosen:
+      text: "The team ran its job queue as a table in its Postgres database, first through the Queue Classic library and later through Que."
+      locator: "Section: Locking algorithms"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The author's case for a database queue is transactional consistency: a job inserted by an operation that fails is undone along with it, and workers cannot pick up a job before the inserting transaction has committed."
+      locator: "Section: Why put a job queue in Postgres?"
+    worked_before: null
+    cost_paid:
+      text: "The queue became exposed to long-lived transactions elsewhere on the database. The author sees a job queue as the worst case of a problem that any hot Postgres table can suffer, and agrees only in part that Postgres is a poor home for a queue."
+      locator: "Section: Lessons learnt"
+    outcome:
+      text: "The team first hit the queue degradation described in f1 in production, then reproduced it on a test bench to work on fixes."
+      locator: "Section: Building a test bench"
+    applies_from: null
+    curator_notes:
+      - The rationale is written as the author's general argument for a database queue, not as a record of this team's original decision. Nothing measured forced the choice, so forcing_condition is empty.
+    aliases:
+      - transactional enqueue
+      - job queue in the database
+      - job runs before the transaction commits
+      - enqueue inside transaction
+      - database backed queue
+    tech: [postgres, que]
+  - id: d2
+    kind: decision
+    topics: [async-processing]
+    title: Switched from Queue Classic to Que, which delayed but did not remove the degradation
+    chosen:
+      text: "Moved the job queue from the Queue Classic library to Que, a library with a reputation for better speed."
+      locator: "Section: Locking algorithms"
+    rejected: []
+    forcing_condition:
+      text: "A problem with the queue in production, which the team suspected was caused by the comparatively slow way Queue Classic locks jobs."
+      locator: "Section: Locking algorithms"
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The problem still existed on Que, although its better overall performance seemed to hold it off a little longer. The author says both libraries share the same root problem."
+      locator: "Section: Locking algorithms"
+    applies_from: null
+    curator_notes:
+      - The post later traces the cause to dead row versions pinned by an old transaction, so swapping libraries did not touch the cause. See f1.
+    aliases:
+      - queue classic to que
+      - faster postgres queue library
+      - switching queue library did not help
+      - postgres advisory lock queue
+    tech: [postgres, que, queue-classic]
+  - id: f1
+    kind: failure
+    topics: [datastore-choice, async-processing, dependency-failure]
+    title: A long-lived transaction pinned dead rows and made a Postgres job queue run away
+    trigger:
+      text: "Long-lived transactions on a Postgres database the queue shared with other teams. The author says the problem would have taken much longer to appear had the database not been shared with teams that understood little about what they ran on it."
+      locator: "Section: Lessons learnt"
+    mechanism:
+      text: "While an old transaction stays open, deleted job rows cannot be vacuumed because it might still see them. Lock attempts then scan through ever more dead index entries (100,000 passes per attempt by the end of the test bench run) and every job worked adds another, so locking slows, workers fall behind and the queue grows without bound."
+      locator: "Section: Descending the B-tree"
+    why_defences_failed:
+      text: "Automatic vacuuming is meant to clear dead rows, but a manual vacuum of the queue table in the test bench found 247311 dead row versions that could not be removed yet, because they were possibly still visible to another process."
+      locator: "Section: Dead tuples"
+    impact:
+      text: "In the test bench the time to lock a job climbed from under 0.01 seconds to about 15 times that, 0.1 seconds and above, so workers locked fewer jobs in the same time; left long enough, jobs arrived faster than they were worked and the queue ran away."
+      locator: "Section: Slow lock time"
+    fix:
+      text: "Planned: the author recommends changing how workers lock jobs, which helps but does not cure it, watching for long-lived transactions, and not sharing a database across components or teams. The post does not say which of these were deployed."
+      locator: "Section: Summary"
+    curator_notes:
+      - Every quantified result is from the author's test bench (a producer, a worker and a process that opens a transaction and sits idle). The post gives no figures for the production occurrence, and its opening scenario is a story.
+      - The post does not say whether the patched Que, or a supervisor that terminates old transactions, was deployed in production.
+    aliases:
+      - queue backlog grows while workers look healthy
+      - dead tuples cannot be removed
+      - vacuum blocked by old transaction
+      - idle in transaction
+      - job lock time increasing
+      - runaway queue
+      - table bloat on a hot queue table
+      - postgres as a queue
+    tech: [postgres, que, queue-classic]

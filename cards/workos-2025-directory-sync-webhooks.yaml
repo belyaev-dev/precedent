@@ -1,0 +1,74 @@
+schema: 1
+id: workos-2025-directory-sync-webhooks
+title: WorkOS Directory Sync webhooks delayed for all customers when one customer's endpoint outage filled a shared worker pool
+org: WorkOS
+system: Directory Sync webhook delivery
+architecture:
+  text: "Directory Sync webhook delivery draws on a pool of worker capacity shared across customers."
+  locator: "Section: Contributing Factors"
+as_of: "2025-09"
+evidence: incident
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: customers delayed over 10 minutes
+      value: 26
+      unit: customers
+      qualifier: for at least 10 percent of their webhook volume during the incident
+      locator: "Section: What Happened"
+    - axis: other
+      name: system-wide 90th percentile delay
+      value: 49
+      unit: minutes
+      qualifier: peak during the incident
+      locator: "Section: What Happened"
+source:
+  url: https://status.workos.com/incidents/f5yz2l096rzl
+  archive_url: null
+  title: Elevated Webhook Delays
+  publisher: WorkOS status page post-mortem
+  published: "2025-09-17"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [tenant-isolation, load-shedding-backpressure]
+    title: One customer's endpoint outage made deliveries time out, filled the shared worker pool and delayed Directory Sync webhooks for everyone
+    trigger:
+      text: "A customer that generated a high volume of Directory Sync webhooks had an outage on its own system, so deliveries to it began timing out."
+      locator: "Section: What Happened"
+    mechanism:
+      text: "Timeouts made deliveries fail slowly and be attempted repeatedly, which consumed the capacity of the webhook workers; because Directory Sync delivery used one shared pool, the growing backlog delayed every customer's webhooks."
+      locator: "Section: Contributing Factors"
+    why_defences_failed: null
+    impact:
+      text: "Delivery was delayed for all customers. 26 customers had delays over 10 minutes on at least 10% of their webhooks, and the system-wide 90th percentile delay reached 49 minutes."
+      locator: "Section: What Happened"
+    fix:
+      text: "Planned: Directory Sync webhooks are being tested on a new delivery architecture that isolates one customer's delivery failures from others, along with load shedding for high webhook volumes and better alerting for degraded delivery."
+      locator: "Section: Future Prevention & Improvements"
+    curator_notes:
+      - "The Timeline section gives delays from 14:54 UTC on 10 September 2025, a first alert at 16:50, the source found at 17:19 and normal delivery at 17:46. Better alerting is a listed follow-up, but the post does not say why detection or isolation failed, so why_defences_failed is left empty."
+      - "The post-mortem describes the isolation architecture as in testing and the load shedding and alerting as intended work, so the fix field reports plans rather than results."
+      - "The trigger was a receiver outage, not a fault in the sender; the failure reported is that one receiver's timeouts could use up capacity shared by all customers."
+    aliases:
+      - one slow customer endpoint delays everyone
+      - noisy neighbour webhooks
+      - webhook worker starvation
+      - timeouts exhaust the worker pool
+      - head of line blocking
+      - retries to a dead endpoint clog delivery
+      - webhook backlog for all customers
+    tech: []

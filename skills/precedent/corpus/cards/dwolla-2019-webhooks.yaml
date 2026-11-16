@@ -1,0 +1,95 @@
+schema: 1
+id: dwolla-2019-webhooks
+title: Dwolla replaces a shared webhook queue with a queue and handler per customer
+org: Dwolla
+system: Webhook notifications
+architecture:
+  text: "Each subscribed customer has its own SQS queue and Lambda handler; events are looked up and sent to that customer's queue, and delivery results go to a separate queue for storage."
+  locator: "Near: we look up the appropriate customer's queue"
+as_of: "2019"
+evidence: production
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://www.serverless.com/blog/lessons-learned-from-sending-millions-of-serverless-webhooks
+  archive_url: null
+  title: Lessons Learned From Sending Millions of Serverless Webhooks
+  publisher: Serverless blog, post about Dwolla's own system
+  author: Rocky Warren
+  published: "2019-05-27"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [tenant-isolation, async-processing]
+    title: Per-customer SQS queue and Lambda handler replace one shared RabbitMQ queue so slow or heavy customers stop delaying others
+    chosen:
+      text: "A dedicated SQS queue and Lambda handler for each subscribed customer, with events routed to that customer's queue, results sent to a separate queue for storage, and the send rate configurable per customer."
+      locator: "Near: dynamically provision a Simple Queue Service (SQS) queue"
+    rejected: []
+    forcing_condition:
+      text: "On the shared queue, customers sending big payouts and customers whose APIs answered slowly held up webhooks for all others, and adding handlers to drain the backlog pushed parallel webhooks at every customer API, including ones that could not cope."
+      locator: "Near: The shared queue meant high-volume customers doing large"
+    rationale: null
+    worked_before:
+      text: "A simple design of one RabbitMQ queue served by a pool of ECS handlers, which called the customer's API and put the result on a second queue for storage, served the company for years."
+      locator: "Near: After years of serving us well, we needed"
+    cost_paid:
+      text: "Because the per-customer handlers are invoked often and scale up and down with load, they hit Lambda cold starts frequently; the old handlers were in Scala, whose cold starts on Lambda are slow, and the new ones are in TypeScript."
+      locator: "Near: we run into cold starts often"
+    outcome:
+      text: "Launched in March, the new design cut peak-load delivery times from minutes to seconds; the post also reports better reliability, lower cost and per-customer configuration."
+      locator: "Near: cutting delivery times during peak load from minutes"
+    applies_from: null
+    curator_notes:
+      - "The post says nothing about how many customers or webhooks per second the system handles, so no scale tier is assigned."
+      - "The post also advises knowing AWS account limits (Lambda concurrency, CloudFormation stacks) as a general lesson; it does not say Dwolla hit them, so they are not recorded as a cost."
+    aliases:
+      - noisy neighbour webhooks
+      - one slow customer delays all webhooks
+      - queue per tenant
+      - per subscriber queue
+      - head of line blocking
+      - shared queue starvation
+    tech: [rabbitmq, sqs, lambda, ecs]
+  - id: d2
+    kind: decision
+    topics: [tenant-isolation, capacity-cost]
+    title: Pre-create disabled per-customer resources and toggle the event source mapping instead of creating and deleting them on subscribe
+    chosen:
+      text: "Create each customer's queue and handler in a disabled state when the customer is created, and only enable or disable the Lambda event source mapping when the customer subscribes or unsubscribes."
+      locator: "Near: we provision disabled resources on customer creation and"
+    rejected:
+      - option: Create the queue and handler on subscribe and delete them on unsubscribe
+        reason: "Tried in testing and abandoned: provisioning and teardown were slow, and functional tests soon hit race conditions."
+        locator: "Near: In our initial testing, we created the SQS"
+    forcing_condition:
+      text: "In early testing, building the queue and handler at subscription and removing them at unsubscription took a long time and led to race conditions."
+      locator: "Near: quickly ran into race conditions during functional testing"
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "The post reports that switching the event source mapping on and off is much quicker, and that idle per-customer resources still cost nothing."
+      locator: "Near: much faster and still ensures we pay nothing"
+    applies_from: null
+    curator_notes:
+      - "The post describes the first approach as an initial test, not a production setup that was later reversed."
+    aliases:
+      - provisioning race conditions
+      - create resources per tenant on signup
+      - pre provisioned tenant queues
+      - toggle event source mapping
+    tech: [sqs, lambda]

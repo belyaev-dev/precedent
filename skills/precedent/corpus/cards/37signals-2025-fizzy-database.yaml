@@ -1,0 +1,111 @@
+schema: 1
+id: 37signals-2025-fizzy-database
+title: 37signals builds a SQLite database per customer for Fizzy, drops it before launch and ships on one shared MySQL database
+org: 37signals
+system: Fizzy database layer
+architecture:
+  text: Fizzy, a 37signals product, runs on one big MySQL database holding every customer's data. An earlier design giving each customer its own SQLite database ran only for staff and invited testers and was dropped before launch.
+  locator: "Near: one big MySQL database with everybody"
+# The transcript gives "November 18" for the switch with no year and the speaker says he does not
+# remember dates well. The year rests on the linked Rails World 2025 talk, given before the switch,
+# and on the February 2026 publication saying Fizzy had been out a few months; no month is asserted.
+as_of: "2025"
+evidence: production
+workloads: [multi-tenant-data]
+footprint:
+  shape: single-database
+  locator: "Near: one big MySQL database with everybody"
+scale:
+  # The post gives no request rate and no total stored data. Per-customer file sizes are the speaker's
+  # guess for individual customers, and the only engineer count (three) describes the infrastructure sub-team.
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://dev.37signals.com/fizzy-infrastructure/
+  archive_url: null
+  title: Behind the Fizzy Infrastructure
+  publisher: 37signals
+  author: Kevin McConnell
+  published: "2026-02-26"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [tenant-isolation, datastore-partitioning, datastore-choice]
+    title: "Pre-launch design, never shipped: a SQLite database per customer on the app servers, to put data near users"
+    chosen:
+      text: For Fizzy's pre-launch build, each customer got a separate SQLite database living on the ordinary Rails app servers instead of a central database server, so one customer's data was one file that could be put anywhere.
+      locator: "Near: giving everyone their own database but running those"
+    rejected:
+      - option: A separate Docker container per customer
+        reason: Wasteful at a large customer count because most containers would sit idle; suspending and waking them fast enough would have been a large project.
+        locator: "Near: host everyone's own copy of the app"
+      - option: Run the usual SaaS MySQL setup inside the self-hosted package as well
+        reason: Would have solved packaging for both sales models but done nothing for speed.
+        locator: "Near: squeeze all the things we need on the"
+    forcing_condition: null
+    rationale:
+      text: The speaker gives two goals. One setup should serve both a self-hosted edition and the SaaS, and, a goal that became at least as important, the app should feel faster by keeping each customer's data close to them.
+      locator: "Near: there were really two reasons for it"
+    worked_before: null
+    cost_paid:
+      text: Each customer's data had to sit on the machine running its app server, so adding capacity meant moving customers between servers, and every database needed redundant copies elsewhere; with no existing tool that fit, the team built its own replication.
+      locator: "Near: now your data has to live on the"
+    outcome:
+      text: A first stage, one writer app server with a couple of replicated readers and Cloudflare routing users to the nearest site, served staff and an invite-only tester group for a long time, fast and reliable. The multi-writer stage took much longer and the design never launched (see d2).
+      locator: "Near: what we used internally for a long time"
+    applies_from: null
+    curator_notes:
+      - This design never went into general production; it served only 37signals staff and invited testers. It is evidence about build and operating cost for a small team, not about behaviour under production load, and no failure under load is reported.
+    aliases:
+      - database per tenant
+      - sqlite per customer
+      - per tenant sqlite
+      - tenant per file
+      - data locality per customer
+      - one database per customer
+    tech: [sqlite, rails]
+  - id: d2
+    kind: decision
+    topics: [datastore-partitioning, tenant-isolation, datastore-choice]
+    title: Fall back to one shared MySQL database for all accounts days before launch
+    chosen:
+      text: Fizzy was converted to the way 37signals runs its other apps, one shared MySQL database for all accounts, a fallback the team called Plan B.
+      locator: "Near: plan B was that we would just convert"
+    rejected:
+      - option: One SQLite database per customer, replicated and routed across app servers
+        reason: Features that span customers, such as login, which must authenticate a person before listing accounts held on different machines, became hard to build.
+        locator: "Near: up with things like the way login works"
+    forcing_condition:
+      text: The product was ready to ship, but the SQLite infrastructure was not ready to run responsibly; runbooks for machine loss or heavy replication lag, and benchmarks for a large day-one sign-up surge, had not been done.
+      locator: "Near: having run books for how to handle operational"
+    rationale:
+      text: The team also doubted it still wanted the design; cross-customer features had turned awkward, and the speaker was unsure it would be glad of the choice a year later as customers and features grew.
+      locator: "Near: we're not quite ready to go with this"
+    worked_before: null
+    cost_paid:
+      text: Switching took roughly a week for the whole team; the individual changes were mostly simple but very numerous.
+      locator: "Near: a week of work by the whole team"
+    outcome:
+      text: Fizzy shipped on MySQL but kept a piece of the SQLite work, its replica-lag handling; requests track the user's last written transaction and are re-sent to the writer only when a reader has not yet caught up, instead of pinning reads to the writer.
+      locator: "Near: we kept the idea and we ported it"
+    applies_from: null
+    curator_notes:
+      - The post gives no traffic or stored-data totals. The speaker puts three people on the infrastructure work towards the end, but that is a sub-team, so no team tier is set.
+      - The speaker mentions possibly splitting customers into a few regional MySQL databases later; that is an idea, not something reported as done.
+    aliases:
+      - shared database for all accounts
+      - cross tenant login problem
+      - abandon database per tenant
+      - plan b mysql
+      - tenant scoping every query
+    tech: [mysql, sqlite, rails]

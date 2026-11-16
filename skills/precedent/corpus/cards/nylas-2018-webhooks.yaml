@@ -1,0 +1,181 @@
+schema: 1
+id: nylas-2018-webhooks
+title: Nylas rebuilds its webhook sender after per-customer database readers stopped scaling
+org: Nylas
+system: Webhook notifications for account changes
+architecture:
+  text: "After the rebuild there is one reader per shard, consuming an ordered change log from AWS Kinesis; everything else, such as backfilling a customer endpoint that had been down, reads from the database."
+  locator: "Section: Kinesis to the rescue"
+as_of: "2018"
+evidence: production
+workloads: [webhook-delivery]
+footprint:
+  shape: partitioned
+  locator: "Near: grew from a couple MySQL shards to several"
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: worst webhook delay before the rebuild
+      value: 10
+      unit: minutes
+      qualifier: as much as, some webhooks
+      locator: "Near: webhooks being delayed as much as 10 minutes"
+    - axis: other
+      name: p90 delivery latency of the legacy system
+      value: 90
+      unit: seconds
+      qualifier: over, all customers
+      locator: "Section: Conclusion"
+    - axis: other
+      name: p90 delivery latency of the rebuilt system
+      value: 1.5
+      unit: seconds
+      qualifier: around, all customers
+      locator: "Section: Conclusion"
+source:
+  url: https://dev.to/nylas/speeding-up-our-webhooks-system-60x-2idh
+  archive_url: null
+  title: Speeding up our Webhooks System 60x
+  publisher: Nylas (posted on DEV Community)
+  author: Karim Hamidou
+  published: "2018-06-20"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, capacity-cost]
+    title: One reader per shard replaces one reader thread per customer webhook after delays reached 10 minutes
+    chosen:
+      text: "Rebuild the sender around one reader per shard in place of several readers per shard, first as a prototype to test whether it fixed the load problem."
+      locator: "Section: Rebuilding webhooks"
+    rejected: []
+    forcing_condition:
+      text: "The previous December the webhook system could not keep pace with traffic, and some webhooks arrived up to 10 minutes late."
+      locator: "Near: webhooks being delayed as much as 10 minutes"
+    rationale:
+      text: "Flamegraphs of the legacy sender showed much of its time in SQLAlchemy code and in waits on MySQL shards, which the team took as confirming a long-held suspicion that it ran too many readers."
+      locator: "Section: Rebuilding webhooks"
+    worked_before:
+      text: "The original sender, written three years earlier, ran one reader thread per webhook and left reliability to MySQL: a crashed machine resumed where it left off, and a customer that came back up could be sent every change it missed. It slowed as customers grew from a half-dozen to hundreds and shards from a couple to several hundred."
+      locator: "Section: How our legacy webhook system worked"
+    cost_paid: null
+    outcome:
+      text: "Measured after the full rollout of the rebuilt system, p90 latency went from over 90 seconds to around 1.5 seconds, the 60x gain the post reports for the rebuild as a whole; the old system often took over a minute per transaction."
+      locator: "Section: Conclusion"
+    applies_from: null
+    curator_notes:
+      - "The 60x figure covers the whole rebuild, including the switch of the change source to Kinesis described in d2; the post does not separate the two effects."
+      - "Scale is given only as hundreds of customers and several hundred MySQL shards, with no event rates, so no scale tier can be assigned."
+      - "The post says one reader per shard both for the MySQL-based prototype and for the Kinesis-based final system without saying whether the shards meant are MySQL or Kinesis shards; this card keeps that ambiguity."
+    aliases:
+      - webhook delay
+      - thread per customer polling
+      - polling database for webhook events
+      - webhooks slow down as customers grow
+      - reader per tenant
+      - webhook latency p90
+    tech: [mysql, kinesis]
+  - id: d2
+    kind: decision
+    topics: [async-processing, datastore-choice]
+    title: Kinesis chosen over the MySQL binlog and Kafka as the ordered source of changes, mainly for operational simplicity
+    chosen:
+      text: "Use AWS Kinesis as the source of an ordered log of changes for the webhook readers."
+      locator: "Section: The phantom reads problem"
+    rejected:
+      - option: Read the MySQL binlog
+        reason: "Too heavy to operate for the team as it then was; Kinesis was the easiest of the three options to run."
+        locator: "Section: The phantom reads problem"
+      - option: Run Apache Kafka
+        reason: "Too heavy to operate for the team as it then was; Kinesis was the easiest of the three options to run."
+        locator: "Section: The phantom reads problem"
+    forcing_condition:
+      text: "Saving the last sent MySQL transaction id as the resume point proved unsafe because ids are not guaranteed to rise in commit order, so MySQL could not be relied on to return transactions in order."
+      locator: "Section: The phantom reads problem"
+    rationale:
+      text: "Kinesis was picked mainly as the simplest of the three options to operate; the post adds that the team was hiring operations staff."
+      locator: "Section: The phantom reads problem"
+    worked_before: null
+    cost_paid:
+      text: "Kinesis is limited to 1 MB of writes and 2 MB of reads per second and allows 5 read transactions per second, which ruled out several processes reading the same shard; the design had to be built around these constraints."
+      locator: "Section: Kinesis to the rescue"
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "Both alternatives lost on operational cost for this team at that time, not on technical grounds, and the post gives no figures for that cost."
+    aliases:
+      - kinesis vs kafka for webhooks
+      - managed log instead of binlog
+      - ordered change feed
+      - change data capture for webhooks
+      - mysql binlog tailing
+    tech: [kinesis, mysql]
+  - id: d3
+    kind: decision
+    topics: [deployment-rollout, observability]
+    title: New sender ran two months in a simulated mode that sent nothing, compared against the legacy sender, before cutover
+    chosen:
+      text: "Run the new sender in a simulated mode that did not actually send webhooks, instrument the old and new systems to compare the transactions each sent, and only then cut customers over."
+      locator: "Section: Roll out"
+    rejected:
+      - option: Staged rollout to a growing share of users, starting at 10 percent
+        reason: "The team wanted to avoid unexpected issues such as dropped webhooks or performance regressions."
+        locator: "Section: Roll out"
+    forcing_condition: null
+    rationale:
+      text: "Customers depend heavily on webhooks and a broken sender would break their applications for an unknown time, so the team wanted no dropped webhooks or performance regressions at launch."
+      locator: "Section: Roll out"
+    worked_before: null
+    cost_paid:
+      text: "Several weeks went into instrumenting both systems to confirm they sent the same transactions, using a custom Flask app that was pinged whenever a webhook was sent."
+      locator: "Section: Roll out"
+    outcome:
+      text: "The service had run in simulated mode for two months when it was rolled out to all customers, by copying each webhook to point at the new system, turning off the old one, and checking that no transactions were dropped."
+      locator: "Section: Roll out"
+    applies_from: null
+    aliases:
+      - shadow mode
+      - dark launch
+      - shadow traffic
+      - dry run webhooks
+      - migrating a webhook sender safely
+      - compare old and new sender
+    tech: []
+  - id: f1
+    kind: failure
+    topics: [consistency-transactions, delivery-idempotency]
+    title: Resuming from the last sent MySQL auto-increment id made the new webhook sender skip transactions in testing
+    trigger:
+      text: "The sender saved the id of the last transaction sent to each customer as its resume point, assuming MySQL assigns auto-increment values at commit time so that they only ever rise."
+      locator: "Section: The phantom reads problem"
+    mechanism:
+      text: "When two transactions run concurrently, auto-increment ids need not rise in commit order, so resuming after the last sent id let the sender skip transactions at unpredictable times."
+      locator: "Section: The phantom reads problem"
+    why_defences_failed: null
+    impact:
+      text: "Seen only in a test deployment of the new sender that sent no real webhooks: during testing it sometimes failed to send a transaction it should have sent. The post reports no effect on customers."
+      locator: "Section: The phantom reads problem"
+    fix:
+      text: "The team stopped relying on MySQL to return transactions in order and took the ordered log of changes from Kinesis instead."
+      locator: "Section: The phantom reads problem"
+    curator_notes:
+      - "The defect was found in a test deployment that sent no real webhooks, so the source reports no customer impact; the no-send run is what exposed it."
+      - "The post describes a long hunt through other suspects before the id assumption was found, but gives no reason why tests or reviews missed it, so why_defences_failed is left empty."
+    aliases:
+      - missed webhook events
+      - events skipped by a cursor
+      - auto increment not monotonic
+      - commit order versus id order
+      - resume cursor loses rows
+      - lost events with an id cursor
+    tech: [mysql]
