@@ -64,6 +64,7 @@ review:
   reviewed_by: Ada Example
   reviewed_at: "2026-11-16"
 status: current
+status_note: The author later added a follow-up post; this card covers the original only.
 records:
   - id: d1
     kind: decision

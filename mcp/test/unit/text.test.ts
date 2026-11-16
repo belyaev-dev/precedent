@@ -65,6 +65,16 @@ describe("queryTerms", () => {
     expect(queryTerms(`${" ".repeat(200)}late`).terms).toEqual([]);
   });
 
+  it("keeps words in any script, lower-cased, so that they can be reported as absent", () => {
+    expect(queryTerms("Очередь ЗАДАЧ 数据库 ουρά").terms.map((t) => t.word)).toEqual(["очередь", "задач", "数据库", "ουρα"]);
+    // Bidirectional overrides, zero-width characters and other format characters are not part of any word.
+    expect(queryTerms("ab\u202ecd \u200bef\ufeff").terms.map((t) => t.word)).toEqual(["ab", "cd", "ef"]);
+  });
+
+  it("counts words over the length limit instead of dropping them silently", () => {
+    expect(queryTerms(`queue ${"x".repeat(41)} ${"я".repeat(50)}`)).toMatchObject({ terms: [{ term: "queu", word: "queue" }], tooLong: 2 });
+  });
+
   it("reduces operators, markup and control characters to plain words or nothing", () => {
     const hostile = 'title:"x" OR 1=1; DROP TABLE cards;-- <script>alert(1)</script> ${7*7} {{x}} \u0000‮ (a|b)* .*+?^$ \\';
     for (const { term, word } of queryTerms(hostile).terms) {

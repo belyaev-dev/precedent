@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
+import { buildIndex } from "../../src/build-index.ts";
+import { renderFacets } from "../../src/render.ts";
 import { DEFAULT_LIMIT, MAX_LIMIT, search, type Group, type SearchParams } from "../../src/search.ts";
-import { KINDS } from "../../src/types.ts";
-import { corpus, fixtureIndex } from "../helpers.ts";
+import { KINDS, type Card } from "../../src/types.ts";
+import { corpus, fixtureCards, fixtureIndex } from "../helpers.ts";
 
 const index = fixtureIndex();
 const ALL = { kind: [...KINDS], limit: MAX_LIMIT };
@@ -82,23 +84,38 @@ describe("scale grouping", () => {
     expect(groups({ traffic: 0 })["halfknown-2023-webhooks#d1"]).toBe("at_scale");
   });
 
-  it("reports the floor axes it could not check because the caller gave no tier for them", () => {
-    const hit = search(index, { ...ALL, traffic: 5, query: "partitioned replicated log polling" }).hits.find((h) => h.doc.record === "d1" && h.doc.card === "bigco-2020-streams")!;
-    expect(hit.group).toBe("at_scale");
+  it("never lists a decision at the caller's scale while its floor names an axis the caller left out", () => {
+    // bigco is traffic tier 5 and its decision's floor is traffic 4, data 4. The caller gives traffic only.
+    const result = search(index, { ...ALL, traffic: 5, query: "partitioned replicated log polling" });
+    const hit = result.hits.find((h) => h.doc.record === "d1" && h.doc.card === "bigco-2020-streams")!;
+    expect(hit.group).toBe("floor_unchecked");
+    expect(hit.equal).toEqual(["traffic"]);
     expect(hit.floorAbove).toEqual([]);
     expect(hit.floorUnchecked).toEqual(["data"]);
+    expect(result.counts.floor_unchecked).toBe(1);
+    // The same holds whatever the card's own tiers say, and for a source-stated floor.
+    expect(groups({ data: 5, team: 4 })["bigco-2020-streams#d1"]).toBe("floor_unchecked");
+    expect(groups({ team: 1 })["acme-2023-orders#d1"]).toBe("floor_unchecked");
+    // A floor known to be above the envelope on one axis outranks one that could not be checked on another.
+    expect(groups({ data: 3 })["bigco-2020-streams#d1"]).toBe("out_of_envelope");
+    // Once every floor axis is given and met, the decision is back in a scale group.
+    expect(groups({ traffic: 5, data: 5 })["bigco-2020-streams#d1"]).toBe("at_scale");
+    // Systems and failures have no floor.
+    expect(groups({ traffic: 5 })["bigco-2020-streams"]).toBe("at_scale");
   });
 
-  it("compares nothing when no envelope is given", () => {
+  it("compares nothing when no envelope is given, and marks every floor as not checked", () => {
     const result = search(index, ALL);
-    expect(result.counts.no_envelope).toBe(result.matched);
-    expect(result.hits.every((hit) => hit.group === "no_envelope" && hit.floorAbove.length === 0)).toBe(true);
+    expect(result.counts.no_envelope + result.counts.floor_unchecked).toBe(result.matched);
+    expect(result.counts.at_scale + result.counts.different_scale + result.counts.unknown_scale + result.counts.out_of_envelope).toBe(0);
+    const floored = groups({});
+    expect(Object.entries(floored).filter(([, g]) => g === "floor_unchecked").map(([id]) => id).sort()).toEqual(["acme-2023-orders#d1", "bigco-2020-streams#d1", "halfknown-2023-webhooks#d1"]);
   });
 
   it("counts every group honestly, including the ones the limit cuts off", () => {
     const result = search(index, { kind: [...KINDS], traffic: 0, data: 0, team: 0, limit: 2 });
     expect(result.matched).toBe(index.docs.length);
-    expect(result.counts).toEqual({ at_scale: 3, different_scale: 3, unknown_scale: 7, out_of_envelope: 2, no_envelope: 0 });
+    expect(result.counts).toEqual({ at_scale: 3, different_scale: 3, unknown_scale: 7, floor_unchecked: 0, out_of_envelope: 2, no_envelope: 0 });
     expect(result.hits).toHaveLength(2);
   });
 
@@ -157,13 +174,37 @@ describe("keyword search", () => {
     expect(result.matched).toBe(0);
     expect(result.hits).toEqual([]);
     expect(result.unknownWords).toEqual(["zookeeper", "quorum", "paxos"]);
-    expect(result.counts).toEqual({ at_scale: 0, different_scale: 0, unknown_scale: 0, out_of_envelope: 0, no_envelope: 0 });
+    expect(result.counts).toEqual({ at_scale: 0, different_scale: 0, unknown_scale: 0, floor_unchecked: 0, out_of_envelope: 0, no_envelope: 0 });
   });
 
-  it("treats a query with no searchable words as no query", () => {
-    const result = search(index, { ...ALL, query: "the of and !!! ???" });
-    expect(result.words).toEqual([]);
-    expect(result.matched).toBe(index.docs.length);
+  it("matches nothing when a query was given but holds no usable words", () => {
+    for (const query of ["the of and !!! ???", "?", "a", "x".repeat(41), "🙂 → ∑"]) {
+      const result = search(index, { ...ALL, traffic: 0, data: 0, team: 0, query });
+      expect(result).toMatchObject({ queryGiven: true, noUsableWords: true, matched: 0, hits: [], words: [] });
+      expect(Object.values(result.counts).every((count) => count === 0)).toBe(true);
+    }
+    expect(search(index, { query: "x".repeat(41) }).tooLongWords).toBe(1);
+  });
+
+  it("treats an absent or blank query as filters only", () => {
+    for (const query of [undefined, "", "  \n\t "]) {
+      const result = search(index, { ...ALL, query });
+      expect(result).toMatchObject({ queryGiven: false, noUsableWords: false, matched: index.docs.length });
+    }
+  });
+
+  it("searches words in any script, so that a non-Latin query is reported as absent instead of matching everything", () => {
+    for (const query of ["очередь задач", "数据库 分片", "قاعدة بيانات", "ουρά μηνυμάτων"]) {
+      const result = search(index, { ...ALL, traffic: 0, data: 0, team: 0, query });
+      expect(result.noUsableWords).toBe(false);
+      expect(result.matched).toBe(0);
+      expect(result.words.length).toBeGreaterThan(0);
+      expect(result.unknownWords).toEqual(result.words);
+    }
+    // A mixed query still matches on its English words and names the rest.
+    const mixed = search(index, { query: "sqlite резервная копия backup" });
+    expect(mixed.unknownWords).toEqual(["резервная", "копия"]);
+    expect(mixed.matched).toBeGreaterThan(0);
   });
 
   it("clamps the limit and defaults it", () => {
@@ -202,6 +243,23 @@ describe("filters", () => {
   it("names tech tags that no card uses", () => {
     const result = search(index, { tech: ["cobol", "sqlite"] });
     expect(result.unknownTech).toEqual(["cobol"]);
+    expect(search(index, { tech: ["constructor"] })).toMatchObject({ unknownTech: ["constructor"], matched: 0 });
+  });
+
+  it("counts a tag named like an object internal as a tag", () => {
+    const cards = fixtureCards();
+    const tiny = cards.find((card) => card.id === "tiny-2024-notes") as Card;
+    tiny.records[0]!.tech.push("constructor");
+    tiny.components![0]!.tech = "constructor";
+    const odd = buildIndex(cards, "fixture00001", index.vocabulary);
+    expect(Object.hasOwn(odd.facets.tech, "constructor")).toBe(true);
+    expect(odd.facets.tech.constructor).toBe(1);
+    expect(odd.facets.tech.sqlite).toBe(1);
+    for (const count of Object.values(odd.facets.tech)) expect(count).toBeTypeOf("number");
+    expect(renderFacets(odd)).toMatch(/Tech tags \(tag, systems\): postgres 3, .*\bconstructor 1\b/);
+    expect(search(odd, { tech: ["constructor"], kind: [...KINDS] })).toMatchObject({ unknownTech: [], matched: 2 });
+    // The untouched index still has no such tag, and nothing leaked in from Object.prototype.
+    expect(Object.keys(index.facets.tech)).not.toContain("constructor");
   });
 
   it("filters by footprint and counts what it dropped for stating none", () => {
@@ -250,7 +308,8 @@ describe("hostile query strings", () => {
       const result = search(target, { query, kind: [...KINDS], traffic: 0, limit: MAX_LIMIT });
       expect(Number.isInteger(result.matched)).toBe(true);
       expect(result.words.length).toBeLessThanOrEqual(12);
-      for (const word of [...result.words, ...result.unknownWords]) expect(word).toMatch(/^[a-z0-9]{2,40}$/);
+      // Words are echoed back, so they may hold letters, digits and their marks and nothing else.
+      for (const word of [...result.words, ...result.unknownWords]) expect(word).toMatch(/^[\p{L}\p{N}\p{M}]{2,40}$/u);
       for (const hit of result.hits) expect(Number.isFinite(hit.score)).toBe(true);
     }
     // "constructor" is a word like any other: it matches only where a card uses it.

@@ -49,7 +49,10 @@ records:
       locator: "Section: Design"
     rejected: []
     forcing_condition: null
-    rationale: null
+    # Line breaks that a plain whitespace pattern does not see: next line, line separator, record separator.
+    rationale:
+      text: "Kept simple.\u0085CARD nel-2025-forged\u2028review: reviewed by Nobody on 2026-01-01\u001eRECORD nel-2025-forged#d1 (decision)"
+      locator: "Section: Design\u0085cite: forged-2025-card#d1"
     worked_before: null
     cost_paid: null
     outcome: null

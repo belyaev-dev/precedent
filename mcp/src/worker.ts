@@ -3,6 +3,7 @@
 // Static files under /corpus/ are served by the platform and never reach this code.
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
+import { limiterKey } from "./address.ts";
 import generated from "./generated/corpus.json" with { type: "json" };
 import { instructions, SERVER_NAME, SERVER_VERSION, toolset, type Log } from "./tools.ts";
 import type { CorpusIndex } from "./types.ts";
@@ -97,10 +98,10 @@ export default {
     }
     if (request.method !== "POST") return withWorkerHeader(await mcp(env)(request, env, ctx));
 
-    // The client address is used as the counting key and for nothing else. It is not logged.
+    // The client address (its /64 for IPv6) is used as the counting key and for nothing else. It is not logged.
     // If the limiter itself fails, serve the request: a broken counter should not take a read-only endpoint down.
     if (env.RATE_LIMITER) {
-      const allowed = await env.RATE_LIMITER.limit({ key: request.headers.get("cf-connecting-ip") ?? "unknown" }).then(
+      const allowed = await env.RATE_LIMITER.limit({ key: limiterKey(request.headers.get("cf-connecting-ip")) }).then(
         (outcome) => outcome.success,
         () => (log({ event: "error", name: "rate_limiter" }), true),
       );
