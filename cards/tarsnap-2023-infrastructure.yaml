@@ -1,0 +1,98 @@
+schema: 1
+id: tarsnap-2023-infrastructure
+title: Tarsnap runs its backup service on one EC2 server over S3 and reports 99.930% uptime since 2008
+org: Tarsnap
+system: Tarsnap backup service infrastructure
+architecture:
+  text: "The Tarsnap server runs in Amazon EC2 and stores archived data in Amazon S3, acknowledging it to clients only after it is stored. Payments go through Stripe and PayPal."
+  locator: "Section: Amazon Web Services"
+components:
+  - name: Amazon S3
+    role: "Holds all archived data. Data is written to standard S3, which survives the loss of 2 datacenters, before the server acknowledges it to clients."
+    tech: s3
+    locator: "Near: archived via Tarsnap is stored to the"
+  - name: Tarsnap server on EC2
+    role: "The server code, built as a log-structured filesystem over S3 that caches metadata in EC2 and bundles writes to save on S3 per-request costs, as the author's earlier post describes."
+    tech: ec2
+    locator: "Near: caching metadata in EC2, and bundling writes in"
+  - name: Payment processing
+    role: "Users pay by credit card directly or through a PayPal account, handled by Stripe and PayPal."
+    locator: "Section: Payment processing: Stripe and PayPal"
+as_of: "2023-08"
+evidence: production
+workloads: [blob-pipeline]
+# One server in EC2, but the data lives in S3, not on that machine, so
+# single-node (application and data on one machine) does not fit.
+footprint: null
+scale:
+  # The page gives no request rate, data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://www.tarsnap.com/infrastructure.html
+  archive_url: null
+  title: Tarsnap infrastructure
+  publisher: Tarsnap
+  published: "2023-08"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [consistency-transactions, backup-restore]
+    title: Acknowledge archives only after they reach standard S3, not the reduced-redundancy class
+    chosen:
+      text: "Data is written to S3 before the Tarsnap server acknowledges it to clients, using the original S3 storage class."
+      locator: "Near: archived via Tarsnap is stored to the"
+    rejected:
+      - option: S3 reduced-redundancy storage
+        reason: "It can only survive the loss of a single datacenter, whereas standard S3 can survive the loss of 2."
+        locator: "Near: not the \"reduced redundancy\" version which can only"
+    forcing_condition: null
+    rationale:
+      text: "The author says this makes loss of archived data to hardware failure extremely unlikely."
+      locator: "Near: so the probability of Tarsnap data being"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - ack after durable write
+      - s3 standard versus reduced redundancy
+      - backup durability
+      - acknowledge after replicated
+    tech: [s3]
+  - id: d2
+    kind: decision
+    topics: [replication-failover, dependency-failure]
+    title: Run the server on one EC2 instance and accept an outage if its hardware fails
+    chosen:
+      text: "The Tarsnap server lives in EC2. A hardware failure would leave the service unavailable until a new EC2 instance is launched and the server code restarted, which the author calls possible but quite unlikely."
+      locator: "Near: it is possible — but quite unlikely"
+    rejected: []
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid:
+      text: "In that case archived data would be unavailable, though not permanently lost."
+      locator: "Near: would make data archived via Tarsnap unavailable"
+    outcome:
+      text: "Uptime was 99.930% from 2008-11-10 to 2023-08-01 and 99.936% over the past 5 years. The longest outages were 43.80 hours in 2012 (EC2 power outage and programmer error) and 26.30 hours on 2023-07-02 (EC2 hardware fault and programmer error)."
+      locator: "Section: Outages"
+    applies_from: null
+    curator_notes:
+      - "The outage table lists programmer error as a cause of both of the longest outages, alongside the AWS faults, so the single-instance design was not the only factor."
+    aliases:
+      - single server backup service
+      - uptime of one ec2 instance
+      - accept downtime of one server
+      - outage history
+    tech: [ec2]

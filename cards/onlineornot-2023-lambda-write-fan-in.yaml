@@ -1,0 +1,114 @@
+schema: 1
+id: onlineornot-2023-lambda-write-fan-in
+title: OnlineOrNot stops each uptime-check Lambda writing to Postgres directly and batches results through SNS and a queue
+org: OnlineOrNot
+system: Uptime check scheduling and result storage
+architecture:
+  text: "A single RDS Postgres instance holds the data. A Lambda fires every minute to find URLs to check, an SQS queue triggers checker Lambdas, and their results go through SNS into a second queue that batches them for one Lambda to write to the database."
+  locator: "Section: Fixing the issue"
+components:
+  - name: Scheduler Lambda
+    role: "Fires every minute and checks the database for URLs due to be checked."
+    tech: aws-lambda
+    locator: "Section: First, some context"
+  - name: SQS queue and checker Lambdas
+    role: "A Lambda triggered via SQS checks each URL. It originally wrote its result straight to the database; it now returns the result through SNS."
+    tech: sqs
+    locator: "Section: Fixing the issue"
+  - name: Batching queue and result-forwarding Lambda
+    role: "A second queue batches results arriving from SNS, and a new Lambda receives those batches and writes them to the database."
+    tech: sns
+    locator: "Section: Fixing the issue"
+  - name: RDS Postgres instance
+    role: "The one database for the web app and the check results."
+    tech: postgres
+    locator: "Near: a single AWS RDS database instance running Postgres"
+as_of: null
+evidence: production
+workloads: [job-queue]
+footprint:
+  shape: single-database
+  locator: "Near: a single AWS RDS database instance running Postgres"
+scale:
+  # The post gives check counts per minute, not a per-second rate, and no data size or team size.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: URLs checked at the same moment each minute when the problem appeared
+      value: 100
+      unit: URLs
+      qualifier: up to; every minute
+      locator: "Near: check up to 100 URLs at a time,"
+source:
+  url: https://onlineornot.com/scaling-aws-lambda-postgres-to-thousands-of-uptime-checks
+  archive_url: null
+  title: Scaling AWS Lambda and Postgres to thousands of simultaneous uptime checks
+  publisher: OnlineOrNot blog
+  author: Max Rozen
+  published: "2023-09-16"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [dependency-failure, load-shedding-backpressure]
+    title: A hundred checker Lambdas each opened a database connection at once, and Postgres refused further connections
+    trigger:
+      text: "The service needed to check up to 100 URLs at a time every minute, and when the jobs finished all the checker Lambdas tried to write their results to the database at about the same moment."
+      locator: "Section: The scalability issue"
+    mechanism:
+      text: "Each URL being monitored needed its own database connection to write its result, so connections grew with the number of checks until the database would open no more."
+      locator: "Section: The scalability issue"
+    why_defences_failed: null
+    impact:
+      text: "The database refused new connections, including from the frontend."
+      locator: "Section: The scalability issue"
+    fix:
+      text: "The first response was to scale the database up a few tiers; the lasting change was to the architecture."
+      locator: "Section: The scalability issue"
+    aliases:
+      - lambda database connection exhaustion
+      - too many connections postgres serverless
+      - workers each open a connection
+      - frontend cannot connect because workers hog connections
+    tech: [aws-lambda, postgres, rds]
+  - id: d1
+    kind: decision
+    topics: [async-processing, capacity-cost]
+    title: Fan results in through SNS and a batching queue so one Lambda writes to Postgres, instead of upgrading the database
+    chosen:
+      text: "Checker Lambdas return their results through SNS to a second queue that batches them, and a new Lambda writes each batch to the database, so the app scales with the number of result-forwarding functions rather than with each checker."
+      locator: "Section: Fixing the issue"
+    rejected:
+      - option: Keep upgrading the database tier each time more capacity was needed
+        reason: "His largest customer so far wanted over a thousand URLs checked at a time, every minute, and the author ran the numbers and found he would quickly run out of tiers to upgrade to."
+        locator: "Section: Fixing the issue"
+    forcing_condition:
+      text: "With up to 100 checks finishing at once, the checker Lambdas' writes made the database refuse new connections, including from the frontend."
+      locator: "Section: The scalability issue"
+    rationale:
+      text: "The author wanted the system to scale further without paying for a bigger database."
+      locator: "Near: without needing to pay for a bigger database"
+    worked_before:
+      text: "The first version was one RDS Postgres instance, a per-minute scheduler Lambda, an SQS queue and checker Lambdas that wrote results directly."
+      locator: "Section: First, some context"
+    cost_paid: null
+    outcome:
+      text: "The database instance could be downgraded back to where it started, with only a minor percentage increase in CPU usage."
+      locator: "Section: Fixing the issue"
+    applies_from: null
+    aliases:
+      - fan in writes to database
+      - batch writes from lambdas
+      - connection limit serverless postgres
+      - sns plus sqs batching
+      - avoid upgrading database for connections
+    tech: [aws-lambda, sns, sqs, postgres]
