@@ -1,0 +1,149 @@
+schema: 1
+id: slack-2023-real-time-messaging
+title: Slack delivers messages worldwide in 500ms through consistent-hashed Channel Servers and multi-region Gateway Servers
+org: Slack
+system: Real-time messaging service
+architecture:
+  text: "Slack's real-time layer is four Java services. Stateful in-memory Channel Servers hold channels placed by consistent hashing, Gateway Servers hold the websocket connections, Admin Servers carry messages in from the web app, and Presence Servers track who is online."
+  locator: "Section: Server overview"
+components:
+  - name: Channel Servers
+    role: "Stateful, in-memory servers that keep some history of their channels. Each owns a subset of channels chosen by consistent hashing, and sends every message for them to all Gateway Servers subscribed to that channel."
+    locator: "Section: Server overview"
+  - name: CHARMs (consistent hash ring managers)
+    role: "Manage the consistent hash ring for Channel Servers and replace unhealthy ones quickly, with a new one ready to serve in under 20 seconds."
+    locator: "Section: Server overview"
+  - name: Gateway Servers
+    role: "Stateful, in-memory servers that hold users' details and websocket channel subscriptions. They are the interface between clients and Channel Servers, and the only servers deployed across several regions."
+    locator: "Section: Server overview"
+  - name: Admin Servers
+    role: "Stateless, in-memory servers between the web app backend and the Channel Servers. They find the right Channel Server for a message through the consistent hash ring."
+    locator: "Section: Server overview"
+  - name: Presence Servers
+    role: "In-memory servers that track which users are online, with users hashed to individual servers. Clients ask for presence through the websocket, and get notifications only for users visible on screen."
+    locator: "Section: Server overview"
+  - name: Consul
+    role: "Service discovery. Channel Servers and Admin Servers learn the current hash ring configuration by querying it."
+    tech: consul
+    locator: "Section: Server overview"
+  - name: Envoy
+    role: "Load balancing and TLS termination for services, including forwarding a client's websocket request to a Gateway Server."
+    tech: envoy
+    locator: "Section: Slack client set up"
+  - name: Webapp backend
+    role: "A Hacklang codebase that hosts the APIs clients call. It supplies the user token and websocket set-up details, and Gateway Servers fetch a user's details, including their channels, from it."
+    locator: "Section: Slack client set up"
+as_of: "2023-04"
+evidence: production
+workloads: [realtime-messaging]
+footprint:
+  shape: multi-region
+  locator: "Near: GSs are deployed across multiple geographical regions"
+scale:
+  # The post gives per-host channel counts and a delivery time, but no per-second message rate,
+  # data size or team size, so no tier can be set.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: channels served per Channel Server host at peak
+      value: 16
+      unit: million channels
+      qualifier: about; at peak times
+      locator: "Near: about 16 million channels are served per host"
+    - axis: other
+      name: time for a replacement Channel Server to be ready
+      value: 20
+      unit: seconds
+      qualifier: under
+      locator: "Near: ready to serve traffic in under 20 seconds"
+    - axis: other
+      name: message delivery time across the world
+      value: 500
+      unit: milliseconds
+      qualifier: as the author reports it
+      locator: "Near: delivers messages across the world in 500ms"
+source:
+  url: https://slack.engineering/real-time-messaging/
+  archive_url: null
+  title: Real-time Messaging
+  publisher: Slack Engineering
+  author: Sameera Thangudu
+  published: "2023-04-11"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-partitioning, replication-failover]
+    title: Place channels on stateful Channel Servers by consistent hashing so a failed server is replaced in seconds
+    chosen:
+      text: "Channels are mapped to Channel Servers by hashing the channel ID on a consistent hash ring, and a team's channels are spread across all the servers. A channel can stand for a user, team, enterprise, file, huddle or an ordinary channel."
+      locator: "Section: Server overview"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Because each team's channels are spread across every Channel Server, only a small number of teams have channels on any one server, so when a server is replaced only users of those teams' channels see delayed messages."
+      locator: "Section: Server overview"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "Hash ring managers replace unhealthy Channel Servers quickly, a new one is ready in under 20 seconds, and users of the affected channels see raised message latency for less than 20 seconds."
+      locator: "Section: Server overview"
+    applies_from: null
+    aliases:
+      - consistent hashing for stateful servers
+      - channel to server mapping
+      - replace a chat server quickly
+      - spread a tenant across all servers
+    tech: [java, consul]
+  - id: d2
+    kind: decision
+    topics: [replication-failover, service-boundaries]
+    title: Deploy Gateway Servers in several regions so clients connect nearby, with draining to move users off a failed region
+    chosen:
+      text: "Gateway Servers, which hold clients' websocket connections, are deployed across multiple regions, while the other servers are not. A draining mechanism switches users from a failed region to the nearest good one."
+      locator: "Section: Server overview"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "It lets a Slack client quickly connect to a Gateway Server in its nearest region."
+      locator: "Section: Server overview"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    aliases:
+      - websocket gateway per region
+      - connect to nearest region
+      - region failure draining
+      - multi region edge for realtime
+    tech: [envoy]
+  - id: d3
+    kind: decision
+    topics: [async-processing]
+    title: Send transient events such as typing indicators through the same servers without saving them
+    chosen:
+      text: "Transient events, such as a user typing, are not persisted in the database. The client sends them over its websocket to a Gateway Server, which routes them through the hash ring to a Channel Server, and from there to every subscribed Gateway Server."
+      locator: "Section: Events"
+    rejected: []
+    forcing_condition: null
+    rationale: null
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "The post gives no reason for the transient flow. It also says other events, such as reminders and calendar events, cluster at the top of the hour and cause regular spikes in message delivery."
+    aliases:
+      - typing indicators
+      - ephemeral events
+      - do not persist transient events
+    tech: [websocket]
