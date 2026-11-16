@@ -11,6 +11,7 @@ The evidence ships with this skill in `corpus/`. Start with [corpus/INDEX.md](co
 
 ## The rules that matter
 
+- **Fit, not minimalism.** The aim is a design that meets every stated requirement at the stated scale with nothing extra. Dropping a requirement, or making the design work by assuming the user's numbers down, is a worse failure than an extra component.
 - **Numbers before design.** Establish the scale envelope first. A design without one cannot be checked against anything.
 - **No unions.** Do not add up the components of several references. One reference at the user's scale is the baseline; everything else has to earn its place.
 - **Every component is justified, including the obvious ones.** Each needs a requirement of this project and a record that supports it.
@@ -44,7 +45,7 @@ Map the first three to tiers:
 | 4 | under 100,000 | under 100 TB | over 150 |
 | 5 | 100,000 or more | 100 TB or more | |
 
-If the user gives no numbers, ask once if they are available; otherwise assume tier 0 to 1 and say so. Never assume a large system. State the envelope back in one or two lines before going on.
+Use the user's numbers exactly as given; never reduce a stated figure to make a simpler design fit. If the user gives no numbers, ask once if they are available; otherwise assume tier 0 to 1 and say so. Never assume a large system. State the envelope back in one or two lines before going on.
 
 ### 2. Research
 
@@ -82,6 +83,8 @@ For each component or mechanism, record why it is there:
 
 If neither a record nor a hard requirement supports a component, remove it. If you keep it on general knowledge alone, mark it `uncited` in the ledger so the user can see what rests on evidence and what does not.
 
+**Requirements pass.** Before going further, list every stated "must" and "must not", including availability requirements such as surviving the loss of a machine or zone, and name the concrete mechanism that enforces each: the constraint, the transaction boundary, the retry and recovery path, the replica arrangement. Trace what happens when a worker dies halfway through a unit of work. A requirement with no mechanism is a hole in the design; fix it now, even if that adds a component.
+
 Give each decision a revisit trigger: the measurable condition under which it should be reopened, taken from a record's forcing condition where one exists ("revisit the single database when the primary sustains write rates near what record X reports").
 
 ### 4. Failure replay
@@ -92,7 +95,9 @@ Then the subtraction test: for every component the baseline did not have at this
 
 ### 5. Ledger
 
-End with the decision ledger. This table is the deliverable that makes the design checkable; keep it even when the rest of the answer is short.
+The answer leads with the design itself, in enough detail to build from: the data model, the key statements and flows, and the mechanism behind each requirement. Evidence supports a design; it does not stand in for one. When space is short, shorten the ledger's prose, never the mechanisms.
+
+End with the decision ledger. This table is what makes the design checkable; keep it compact, one line per decision.
 
 | Decision | Requirement it serves | Evidence | Where the evidence does not transfer | Simpler alternative | Revisit when |
 |---|---|---|---|---|---|
