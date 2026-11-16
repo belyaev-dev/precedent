@@ -1,0 +1,87 @@
+# SYNTHETIC TEST FIXTURE. Every fact is invented. Never served as evidence.
+# A very large, disputed system whose decision has a reviewer's floor on two axes.
+schema: 1
+id: bigco-2020-streams
+title: Bigco replaces polling workers with a partitioned event log
+org: Bigco (fictional)
+system: Event streaming platform
+architecture:
+  text: Producers append to a partitioned log replicated across regions, and consumer groups read it independently.
+  locator: "Page 2"
+as_of: "2020"
+evidence: production
+workloads: [event-streaming, webhook-delivery]
+footprint:
+  shape: multi-region
+  locator: "Page 2"
+scale:
+  traffic:
+    tier: 5
+    basis: stated
+  data:
+    tier: 5
+    basis: stated
+  team:
+    tier: 4
+    basis: stated
+  metrics:
+    - axis: traffic
+      name: events
+      value: 400000
+      unit: per second
+      qualifier: peak
+      locator: "Page 3"
+    - axis: data
+      name: retained log
+      value: 300
+      unit: TB
+      locator: "Page 3"
+    - axis: team
+      name: engineers
+      value: 200
+      unit: people
+      qualifier: the platform group
+      locator: "Page 1"
+source:
+  url: https://example.com/bigco-streams
+  archive_url: null
+  title: Streams at Bigco
+  publisher: Example Engineering (fictional)
+  published: "2020-09-01"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: hand-written fixture
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: disputed
+status_note: A former engineer says the peak figure counts replicated copies of each event.
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, datastore-partitioning]
+    title: Move event delivery from polling workers to a partitioned replicated log
+    chosen:
+      text: A partitioned log with consumer groups replaced the polling workers.
+      locator: "Page 4"
+    rejected: []
+    forcing_condition:
+      text: Polling workers fell hours behind at peak because every worker scanned the same table.
+      locator: "Page 4"
+    rationale: null
+    worked_before:
+      text: Polling workers over one table carried delivery for the first four years.
+      locator: "Page 2"
+    cost_paid: null
+    outcome: null
+    applies_from:
+      traffic_tier: 4
+      data_tier: 4
+      basis: curator_judgment
+      rationale: The forcing condition was a table scan that fell behind at peak; nothing in the paper suggests it appears before tens of thousands of events a second.
+    aliases:
+      - kafka style log
+      - consumer lag
+      - polling fell behind
+    tech: [kafka]

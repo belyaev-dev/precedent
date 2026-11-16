@@ -1,0 +1,33 @@
+{
+  "name": "precedent-mcp",
+  "private": true,
+  "type": "module",
+  "description": "Read-only MCP server for the Precedent corpus, on Cloudflare Workers.",
+  "license": "MIT",
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "agents": "^0.33.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/client": "^2.4.0",
+    "@types/node": "^26.6.6",
+    "typescript": "^7.0.2",
+    "vitest": "^5.1.0",
+    "wrangler": "^4.163.0",
+    "yaml": "^2.9.1"
+  },
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "build": "node scripts/build-corpus.mjs",
+    "dev": "wrangler dev",
+    "typecheck": "npm run build && wrangler types && tsc",
+    "test": "npm run build && vitest run",
+    "test:unit": "npm run build && vitest run test/unit",
+    "test:e2e": "npm run build && vitest run test/e2e",
+    "size": "wrangler deploy --dry-run --outdir .wrangler/dry-run",
+    "bench": "node scripts/bench.mjs"
+  }
+}

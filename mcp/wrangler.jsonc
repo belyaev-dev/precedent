@@ -1,0 +1,28 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "precedent-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-01",
+  // agents/mcp/server uses AsyncLocalStorage.
+  "compatibility_flags": ["nodejs_compat"],
+  // Compiles cards/*.yaml into the bundled index and the static corpus before every dev run and deploy.
+  "build": { "command": "node scripts/build-corpus.mjs", "watch_dir": ["src", "scripts", "../cards", "../schema"] },
+  // run_worker_first stays at its default (false): a request that matches a file here is served by the
+  // platform and never invokes the Worker, so the static corpus survives the Worker's daily request quota.
+  "assets": { "directory": "./public" },
+  "ratelimits": [
+    {
+      "name": "RATE_LIMITER",
+      // Any integer not already used for another rate limit in the account.
+      "namespace_id": "1001",
+      // Per client address, per Cloudflare location, approximate. Period must be 10 or 60 seconds.
+      "simple": { "limit": 30, "period": 60 }
+    }
+  ],
+  // Keep the Worker's own count lines (no query text, no addresses). Do not record request metadata.
+  "observability": { "enabled": true, "logs": { "invocation_logs": false } },
+  "workers_dev": true
+  // For a custom domain, add the route and tell the endpoint which hostnames it answers on:
+  // "routes": [{ "pattern": "mcp.example.org", "custom_domain": true }],
+  // "vars": { "ALLOWED_HOSTNAMES": "mcp.example.org" }
+}
