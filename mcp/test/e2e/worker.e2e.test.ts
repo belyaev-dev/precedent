@@ -203,6 +203,13 @@ describe("a 2025-era client against the local Worker", () => {
     expect(large.response.status).toBe(413);
     expect(large.message.error.message).toContain(`${origin}/corpus/corpus.json`);
 
+    // A page on the endpoint's own origin or on a local one may call; a page anywhere else may not.
+    const list = { jsonrpc: "2.0", id: 4, method: "tools/list" };
+    const version = { "mcp-protocol-version": "2025-06-18" };
+    expect((await send(list, { ...version, origin })).response.status).toBe(200);
+    expect((await send(list, { ...version, origin: "http://localhost:5173" })).response.status).toBe(200);
+    expect((await send(list, { ...version, origin: "https://evil.example" })).response.status).toBe(403);
+
     // A browser client on an allowed origin can read both refusals, as it can read an answer.
     const answered = await send({ jsonrpc: "2.0", id: 3, method: "tools/list" }, { "mcp-protocol-version": "2025-06-18", origin: "http://localhost:5173" });
     expect(answered.response.headers.get("access-control-allow-origin")).toBe("*");
