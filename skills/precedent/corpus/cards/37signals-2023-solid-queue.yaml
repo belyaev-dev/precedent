@@ -1,0 +1,128 @@
+schema: 1
+id: 37signals-2023-solid-queue
+title: HEY moves part of its job processing from Resque on Redis to a database-backed queue
+org: 37signals
+system: HEY background jobs (Active Job, Resque and Solid Queue)
+architecture:
+  text: "HEY runs its Active Job work on two backends at once: Resque on Redis, and the new database-backed Solid Queue, which at publication carried about a third of a stated total of roughly 18 million jobs a day, with more being moved."
+  locator: "Near: about 1/3 of our roughly 18 million jobs"
+as_of: "2023-12"
+evidence: production
+workloads: [job-queue]
+footprint: null
+scale:
+  # The source gives a daily job count and a polling-query rate on the queue
+  # database, but no peak rate of jobs or requests, no stored-data size and no
+  # team size, so no axis is set. All numbers are kept as context.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: total jobs per day that the Solid Queue share is a third of
+      value: 18000000
+      unit: jobs per day
+      qualifier: roughly; the post does not say whether this is HEY alone or all of 37signals
+      locator: "Near: of our roughly 18 million jobs per day"
+    - axis: other
+      name: jobs executed daily on Solid Queue
+      value: 5600000
+      unit: jobs per day
+      qualifier: around; at publication
+      locator: "Near: around 5.6 million jobs executed daily"
+    - axis: other
+      name: polling queries on the queue database
+      value: 1300
+      unit: queries per second
+      qualifier: around; current rate at publication, not stated as a peak
+      locator: "Near: we perform around 1,300 polling queries per"
+    - axis: other
+      name: average polling query time
+      value: 110
+      unit: microseconds
+      qualifier: average
+      locator: "Near: average query time of 110"
+    - axis: other
+      name: rows examined per polling query
+      value: 0.02
+      unit: rows
+      qualifier: average
+      locator: "Near: examination of 0.02 rows per query"
+source:
+  url: https://dev.37signals.com/introducing-solid-queue/
+  archive_url: null
+  title: Introducing Solid Queue
+  publisher: 37signals Dev
+  author: Rosa Gutiérrez
+  published: "2023-12-18"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [async-processing, datastore-choice]
+    title: Moved jobs from Resque on Redis to a database-backed queue, starting with the most critical ones
+    chosen:
+      text: "Built Solid Queue, a database-backed Active Job backend, and ran HEY's most critical jobs on it first, with more to follow until HEY runs only on it. Resque on Redis stayed in use meanwhile."
+      locator: "Near: until we run HEY exclusively using Solid Queue"
+    rejected:
+      - option: GoodJob, the existing database-backed Active Job backend
+        reason: "It is built only for PostgreSQL, which 37signals does not use, and a backend meant to become the Rails default had to support MySQL, PostgreSQL and SQLite at a minimum."
+        locator: "Near: GoodJob stood out, but unfortunately, it is built"
+    forcing_condition: null
+    rationale:
+      text: "The goal was that a Rails developer could get background jobs from nothing more than a database, without the seven gems and extra systems 37signals needed; experience from building Solid Cache suggested going back to a database queue."
+      locator: "Near: Our goal was to enable developers to install"
+    worked_before:
+      text: "37signals ran Resque and Redis for many years and the author says it served them well, though running it at scale brought unspecified difficulties, and gaps were filled with plugins and in-house libraries, seven gems in all for Basecamp and HEY."
+      locator: "Near: running Resque and Redis for many years"
+    cost_paid: null
+    outcome:
+      text: "After a few weeks running HEY's most critical jobs, the main gain reported was a system that is simpler to run: with jobs held in a relational database and reached through Active Record, job problems were much easier to debug than under Resque."
+      locator: "Near: main benefit we've already reaped has been simplicity"
+    applies_from: null
+    curator_notes:
+      - The benefit is reported as simpler operation. The post gives no before-and-after figures for throughput, latency or incidents.
+      - The difficulties with Resque and Redis are named but never described or measured, so they are kept in worked_before rather than treated as a forcing condition.
+      - This is a partial migration reported after a few weeks, not a completed one.
+    aliases:
+      - replace redis with a database queue
+      - resque replacement
+      - background jobs without redis
+      - too many gems to run background jobs
+      - fewer moving parts job queue
+      - rails default job backend
+    tech: [solid-queue, resque, redis, active-job]
+  - id: d2
+    kind: decision
+    topics: [async-processing, datastore-choice]
+    title: Database queue design that keeps the polled table small and claims jobs with SKIP LOCKED
+    chosen:
+      text: "Workers claim jobs with SELECT ... FOR UPDATE SKIP LOCKED so they do not block each other. Jobs that are running, scheduled for later, failed or blocked by concurrency limits are kept apart from jobs ready to run, which keeps the polled table small, and a covering index serves both selection and ordering."
+      locator: "Near: keep the table that workers poll as small"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The author notes that speed is the usual reason to run jobs on Redis, and holds that a database queue can be fast enough only if it is designed for it."
+      locator: "Near: Performance is typically the primary reason for relying"
+    worked_before: null
+    cost_paid: null
+    outcome:
+      text: "At around 5.6 million jobs executed daily, polling ran at around 1,300 queries per second, averaging 110 microseconds and examining 0.02 rows per query."
+      locator: "Near: around 5.6 million jobs executed daily, we perform"
+    applies_from: null
+    curator_notes:
+      - The figures are an average query time and row count at one moment. The post gives no peak load, job latency or queue-lag measurement and no database size.
+    aliases:
+      - skip locked job queue
+      - database queue polling cost
+      - keep the queue table small
+      - covering index for job queue
+      - polling query rate
+    tech: [solid-queue, active-job]

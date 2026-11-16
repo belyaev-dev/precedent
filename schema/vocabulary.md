@@ -46,3 +46,4 @@ The design question a record answers.
 | `capacity-cost` | Sizing, headroom and spend |
 | `observability` | Detecting and diagnosing problems |
 | `dependency-failure` | Behaviour when something the system relies on degrades |
+| `backup-restore` | Backups, restores and recovering deleted or corrupted data |

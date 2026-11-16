@@ -1,0 +1,94 @@
+schema: 1
+id: marble-2026-webhooks
+title: Marble moves webhooks from a hosted queue to its own queues and worker so deliveries can be inspected
+org: Marble
+system: Workspace event webhooks
+architecture:
+  text: "A jobs worker takes workspace event IDs from one queue and creates one delivery row per matching endpoint with an upsert keyed by event and endpoint; a second queue drives the outbound HTTP requests."
+  locator: "Section: How it works now"
+as_of: "2026-05"
+evidence: production
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://marblecms.com/blog/webhook-observability
+  archive_url: null
+  title: Making Marble's Webhooks Observable
+  publisher: Marble blog
+  published: "2026-05-17"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [observability, async-processing]
+    title: Own the webhook pipeline after customers could not see what happened to a webhook, leaving a hosted queue
+    chosen:
+      text: "Move webhook processing from the QStash-based first version into a separate jobs worker with its own queues, which persists workspace events, fans them out, records every delivery and attempt, retries failures and feeds delivery status to the dashboard."
+      locator: "Section: Why we moved the pipeline"
+    rejected: []
+    forcing_condition:
+      text: "In April 2026 customer feedback showed users could not see what happened to a webhook: some dashboard-emitted webhooks were effectively fire-and-forget, and there was not enough durable state to inspect a failed or missing delivery."
+      locator: "Section: The thing that was missing"
+    rationale:
+      text: "Marble's public API and MCP server already ran on Cloudflare Workers, so a separate jobs worker kept delivery near the API with its own queues, retries and operations; the post says QStash was not replaced for being bad but to own steps that had become product features."
+      locator: "Section: Why we moved the pipeline"
+    worked_before:
+      text: "The first version, launched the year before on Upstash's QStash, let the team ship webhooks quickly without building its own queueing and served well for sending them, until the need shifted to showing what happened after each send."
+      locator: "Near: first version worked well for getting webhooks out"
+    cost_paid:
+      text: "Owning the pipeline means more code and new work: cleanup jobs for old event and delivery logs, better structured worker logging, a recovery path for events persisted but not queued, and more dashboard work on delivery logs and replay."
+      locator: "Section: Tradeoffs"
+    outcome:
+      text: "Delivery is now visible in the Marble dashboard: users can open delivery logs showing the event, the target endpoint, the result and the detail of every attempt, and support can point a customer to the specific failed attempt."
+      locator: "Section: What users get from this"
+    applies_from: null
+    curator_notes:
+      - "The reported forcing condition is a visibility gap raised by customers; the post reports no load or latency problem with the first version."
+      - "The only size hint is a passing remark that QStash suits a small team; the post gives no volume, headcount or latency figures, so no scale tier is assigned."
+    aliases:
+      - webhook delivery logs
+      - customers cannot see failed webhooks
+      - fire and forget webhooks
+      - replacing a hosted webhook queue
+      - own the webhook pipeline
+      - webhook retry history
+      - replay webhooks
+    tech: [qstash, cloudflare-queues, cloudflare-workers]
+  - id: d2
+    kind: decision
+    topics: [delivery-idempotency]
+    title: Workers atomically claim a delivery before sending so overlapping workers or retried queue messages do not send duplicates
+    chosen:
+      text: "Before sending, each delivery worker atomically updates the delivery from pending or retrying to sending, and exits without sending if another worker has already claimed it."
+      locator: "Section: Delivery attempts and retries"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "The post explains the claim step as a guard against the queue redelivering a message and against two workers handling the same delivery at once."
+      locator: "Section: Delivery attempts and retries"
+    worked_before: null
+    cost_paid: null
+    outcome: null
+    applies_from: null
+    curator_notes:
+      - "The post reports no duplicate-send incident; the claim step is described as a precaution against queue retries and overlapping workers."
+    aliases:
+      - duplicate webhook sends
+      - double delivery
+      - two workers send the same webhook
+      - at least once queue duplicates
+      - claim a row before sending
+      - compare and set delivery status
+    tech: [cloudflare-queues]

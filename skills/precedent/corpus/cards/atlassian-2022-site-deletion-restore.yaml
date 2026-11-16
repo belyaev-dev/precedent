@@ -1,0 +1,112 @@
+schema: 1
+id: atlassian-2022-site-deletion-restore
+title: Atlassian deletes 883 customer sites by mistake and restores them from shared multi-tenant stores
+org: Atlassian
+system: Cloud multi-tenant platform
+architecture:
+  text: Atlassian's cloud products run on a multi-tenant microservice platform in which services and databases serve many customers, and each shard holds several tenants' data, kept isolated from one another.
+  locator: "Section: Multi-tenant architecture"
+as_of: "2022-04"
+evidence: incident
+workloads: [multi-tenant-data]
+footprint:
+  shape: multi-region
+  locator: "Near: data center facilities in multiple regions worldwide"
+scale:
+  # The post gives incident counts and a company-wide customer total, but no request rate, stored-data
+  # total or engineer count for the platform or for any one data store.
+  traffic: null
+  data: null
+  team: null
+  metrics:
+    - axis: other
+      name: customer sites deleted
+      value: 883
+      unit: sites
+      qualifier: this incident
+      locator: "Section: Executive summary"
+    - axis: other
+      name: customers affected
+      value: 775
+      unit: customers
+      qualifier: this incident
+      locator: "Section: Executive summary"
+    - axis: other
+      name: cloud customers
+      value: 200000
+      unit: customers
+      qualifier: over, whole company, not this system
+      locator: "Section: Letter from our co-founders & co-CEOs"
+source:
+  url: https://www.atlassian.com/engineering/post-incident-review-april-2022-outage
+  archive_url: null
+  title: Post-Incident Review on the Atlassian April 2022 outage
+  publisher: Atlassian
+  author: Sri Viswanath
+  published: "2022-04-29"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [deployment-rollout, backup-restore]
+    title: A bulk deletion script fed site IDs instead of app IDs deleted 883 customer sites with no warning
+    trigger:
+      text: A cleanup of a retired standalone app on customer sites was run with the IDs of whole cloud sites instead of app IDs, because of a communication gap between the team that requested the deletion and the team that ran it.
+      locator: "Near: provided the IDs of the entire cloud site"
+    mechanism:
+      text: The deletion API took either a site or an app identifier, trusted whichever it was given, and gave no signal of which kind of deletion was about to happen. The script ran in production against 883 sites and deleted them one after another.
+      locator: "Near: deleted sites sequentially based on the input list"
+    why_defences_failed:
+      text: Peer review checked which endpoint was called and how, not whether the IDs were site or app IDs. The staging test could not expose the error because those IDs did not exist in staging, and a first production run on 30 sites had used correct IDs.
+      locator: "Near: as the IDs did not exist in the"
+    impact:
+      text: 883 sites belonging to 775 customers were deleted. Some customers were down for up to 14 days; sites came back from April 8 and all by April 18. Atlassian states no customer lost more than five minutes of data.
+      locator: "Section: Executive summary"
+    fix:
+      text: "Planned: soft deletes in every system, with data purged only after a retention period, and staged rollout plus a tested rollback plan for any soft delete. Already done: bulk site deletion was blocked immediately."
+      locator: "Section: How will we improve?"
+    aliases:
+      - bulk delete with wrong ids
+      - script deleted customer accounts
+      - mass tenant deletion
+      - soft delete for tenants
+      - delete api accepts site or app id
+      - wrong id type deletion
+    tech: []
+  - id: f2
+    kind: failure
+    topics: [backup-restore, tenant-isolation]
+    title: Restoring hundreds of sites out of shared multi-tenant data stores had no batch tooling and took up to two weeks
+    trigger:
+      text: Hundreds of deleted sites, each spread across many products and stores, had to be restored at once, while the team had the means to recover single sites but none for a large batch.
+      locator: "Section: Workstream 1: Detection, starting the recovery & identifying our approach"
+    mechanism:
+      text: Every data store mixed many customers and was still in use by the others, so the deleted portions had to be pulled out of backups piece by piece and restored by hand, with internal checks and a final customer check for each site.
+      locator: "Near: each data store contains data from multiple customers"
+    why_defences_failed:
+      text: Disaster recovery had been built and tested for infrastructure loss, data corruption, single-service events and single-site deletions. There was no way to pick many sites and restore all their linked products to an earlier point, and site-level runbooks could not be automated quickly at this scale.
+      locator: "Section: Multi-site, multi-product automated restorability"
+    impact:
+      text: The first restoration method created a new site per deleted one, with new identifiers that had to be remapped, in about 70 mostly sequential steps; once optimised it needed about 48 hours per batch and restored 53% of impacted users across 112 sites, April 5 to 14.
+      locator: "Section: Workstream 2: Early recovery and the Restoration 1 approach"
+    fix:
+      text: During the incident a second method un-deleted each site's records in every system under its original identifiers, removing over half the earlier steps and the per-vendor coordination for third-party apps. At about 12 hours per site it restored about 47% of impacted users across 771 sites, April 14 to 17.
+      locator: "Section: Workstream 3: Accelerated recovery and the Restoration 2 approach"
+    curator_notes:
+      - Atlassian's own stores mix many customers, so restoring a subset of tenants meant surgical extraction from backups rather than a rollback. The lesson transfers to any shared-database design that has to restore one tenant while others keep writing.
+      - The fix above is the in-incident change. The lasting change is a plan in the Learning 2 section of the review, automating multi-site, multi-product restores and running regular large-scale restore drills; it is not reported as done.
+    aliases:
+      - restore one tenant from shared backup
+      - restore single customer from multi tenant database
+      - per tenant restore
+      - disaster recovery for tenants
+      - point in time restore of some tenants
+      - tenant data accidentally deleted
+    tech: []

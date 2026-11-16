@@ -125,7 +125,8 @@
         "deployment-rollout",
         "capacity-cost",
         "observability",
-        "dependency-failure"
+        "dependency-failure",
+        "backup-restore"
       ]
     },
     "scaleAxis": {
@@ -388,6 +389,7 @@
         "chosen",
         "rejected",
         "forcing_condition",
+        "rationale",
         "worked_before",
         "cost_paid",
         "outcome",
@@ -439,7 +441,11 @@
           }
         },
         "forcing_condition": {
-          "description": "The measured pain or hard requirement that triggered the choice.",
+          "description": "The measured pain, hard requirement or customer-visible gap that made the team act. Design goals and preferences go in rationale.",
+          "$ref": "#/$defs/factOrNull"
+        },
+        "rationale": {
+          "description": "The reason the source gives for the choice when it is not a forcing condition: a design goal, a preference, a cost.",
           "$ref": "#/$defs/factOrNull"
         },
         "worked_before": {
@@ -501,6 +507,7 @@
           "$ref": "#/$defs/factOrNull"
         },
         "fix": {
+          "description": "What was changed. Begin with 'Planned:' when the source reports an intention, not a completed change.",
           "$ref": "#/$defs/factOrNull"
         }
       }
@@ -545,7 +552,7 @@
           "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$"
         },
         "party": {
-          "description": "first: the organisation that runs the system; required for production and incident cards. third: an independent tester or researcher reporting an experiment.",
+          "description": "first: written by people who built or operate the system, wherever it is published (a company blog, a personal blog, a guest post); required for production and incident cards. third: an independent tester or researcher reporting an experiment.",
           "enum": [
             "first",
             "third"
@@ -623,6 +630,7 @@
         "as_of",
         "evidence",
         "workloads",
+        "footprint",
         "scale",
         "source",
         "review",
@@ -640,6 +648,7 @@
           "$ref": "#/$defs/line"
         },
         "org": {
+          "description": "The organisation that runs the system, as the source names it. When the source does not name it, say so here instead of inferring it.",
           "$ref": "#/$defs/line"
         },
         "system": {
@@ -673,6 +682,9 @@
           "items": {
             "$ref": "#/$defs/workload"
           }
+        },
+        "footprint": {
+          "$ref": "#/$defs/footprint"
         },
         "scale": {
           "$ref": "#/$defs/scale"
@@ -776,6 +788,31 @@
             "type": "string",
             "pattern": "^[df][1-9][0-9]?$"
           }
+        }
+      }
+    },
+    "footprint": {
+      "description": "The deployed shape the source states, for systems where that says more about size than any number does. null when the source does not make it clear. single-node: the application and its data on one machine. single-database: one primary database (replicas allowed) behind any number of application servers. partitioned: data split across shards or several database clusters. multi-region: serving from more than one region.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "shape",
+        "locator"
+      ],
+      "properties": {
+        "shape": {
+          "enum": [
+            "single-node",
+            "single-database",
+            "partitioned",
+            "multi-region"
+          ]
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
         }
       }
     }

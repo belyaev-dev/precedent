@@ -1,0 +1,62 @@
+schema: 1
+id: onfido-2024-webhooks
+title: Onfido webhook queue hits a provider quota during a duplicate surge and stalls new events for hours
+org: Onfido
+system: Webhook delivery service
+architecture:
+  text: "At the time of the incident all webhook messages were processed through a single queue at a cloud provider."
+  locator: "Section: Root Causes"
+as_of: "2024-03"
+evidence: incident
+workloads: [webhook-delivery]
+footprint: null
+scale:
+  traffic: null
+  data: null
+  team: null
+  metrics: []
+source:
+  url: https://status.onfido.com/incidents/qz7p7cfvfgps
+  archive_url: null
+  title: webhook delivery degradation
+  publisher: Onfido status page post-mortem
+  published: "2024-04-09"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: f1
+    kind: failure
+    topics: [delivery-idempotency, load-shedding-backpressure, observability]
+    title: A surge of duplicate webhooks and the retry setup filled one queue's provider quota, so new events were not delivered for hours
+    trigger:
+      text: "Between 03:00 and 05:20 UTC on 28 March 2024 a sharp rise in duplicate webhook notifications made the webhook queues grow."
+      locator: "Section: Summary"
+    mechanism:
+      text: "The one queue carrying all webhook messages ran into a cloud-provider quota on the size of queued messages, caused by the unusual volume of duplicates together with how retries were configured; the retry process kept already queued messages from clearing."
+      locator: "Section: Root Causes"
+    why_defences_failed: null
+    impact:
+      text: "Webhook events created between 05:20 and 09:37 UTC sat undelivered in the fully congested queue; their delivery resumed at 12:10 UTC and finished by 13:30 UTC. Events from 09:37 UTC onward were processed normally."
+      locator: "Section: Summary"
+    fix:
+      text: "Planned: move retries to their own secondary queue so they cannot hold up new events, and discard duplicate messages, both targeted for April 2024. Already done: alerting on-call when queues near the quota limit."
+      locator: "Section: Remedies"
+    curator_notes:
+      - "The post-mortem does not say why duplicate webhook notifications increased, only that their volume was unusually high."
+      - "The status page lists the affected component as the Europe region webhooks, so the report may not cover other regions."
+      - "Per the Timeline, monitoring alerted on-call at 04:08 UTC and scaling up the webhook service at 04:20-04:55 did not help; new deliveries were unblocked at 09:37 by a secondary queue with a higher quota. The post does not say why the defences failed, so that field is left empty."
+    aliases:
+      - duplicate webhooks
+      - webhook events delivered twice
+      - retries block new events
+      - queue in-flight message limit
+      - queue quota exceeded
+      - webhook backlog for hours
+      - single queue for all webhooks
+    tech: [aws]
