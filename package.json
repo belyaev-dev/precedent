@@ -1,0 +1,14 @@
+{
+  "name": "precedent",
+  "private": true,
+  "type": "module",
+  "description": "Evidence cards on how real systems were built and how they failed, for agents doing system design.",
+  "license": "MIT",
+  "scripts": {
+    "validate": "node scripts/validate.mjs"
+  },
+  "devDependencies": {
+    "ajv": "^8.20.0",
+    "yaml": "^2.9.1"
+  }
+}

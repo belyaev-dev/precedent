@@ -1,0 +1,118 @@
+# SYNTHETIC EXAMPLE. Acme and every fact below are invented to show the card
+# format and to exercise the validator. This file is never served as evidence.
+schema: 1
+id: acme-2023-orders
+title: Acme splits its orders database by tenant
+org: Acme (fictional)
+system: Orders service
+architecture:
+  text: A single application backed by Postgres, moved during 2023 from one primary with two replicas to sixteen tenant-keyed shards.
+  locator: "Section: Background"
+as_of: "2023-05"
+evidence: production
+workloads: [multi-tenant-data, crud-app]
+scale:
+  traffic:
+    tier: 3
+    basis: stated
+  # The source gives one table's size, not total stored state. A lower bound
+  # does not identify a tier, so the axis stays empty and the number is kept below.
+  data: null
+  team:
+    tier: 1
+    basis: stated
+  metrics:
+    - axis: traffic
+      name: writes
+      value: 4000
+      unit: per second
+      qualifier: peak, primary database
+      locator: "Section: Why we sharded"
+    - axis: other
+      name: largest table
+      value: 6
+      unit: TB
+      qualifier: one table, not the whole database
+      locator: "Section: Why we sharded"
+    - axis: team
+      name: engineers
+      value: 12
+      unit: people
+      qualifier: the orders team
+      locator: "Section: Background"
+source:
+  url: https://example.com/blog/sharding-orders
+  archive_url: null
+  title: How we sharded the orders database
+  publisher: Acme Engineering (fictional)
+  published: "2023-09-14"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: hand-written example
+  reviewed_by: hand-written example
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-partitioning]
+    title: Application-level sharding by tenant once one primary could not keep up with writes
+    chosen:
+      text: Sixteen Postgres shards keyed by tenant id, routed in the application.
+      locator: "Section: The design"
+    rejected:
+      - option: Move to a distributed SQL database
+        reason: The team judged the migration risk higher than sharding the database it already knew.
+        locator: "Section: Options we considered"
+      - option: A larger single machine
+        reason: null
+        locator: "Section: Options we considered"
+    forcing_condition:
+      text: The single primary peaked at 4,000 writes per second and autovacuum could not keep up on a 6 TB table.
+      locator: "Section: Why we sharded"
+    worked_before:
+      text: One primary with two read replicas served the product from 2019 to 2023.
+      locator: "Section: Background"
+    cost_paid:
+      text: Cross-tenant reports no longer run against the primary store and moved to a warehouse.
+      locator: "Section: What we gave up"
+    outcome: null
+    applies_from:
+      traffic_tier: 3
+      basis: source_stated
+      threshold: The authors write that they would not shard again below roughly 2,000 writes per second on the primary.
+      locator: "Section: Would we do it again"
+    curator_notes:
+      - The stated threshold is for this schema and hardware. It says when this team would shard, not when sharding becomes necessary in general.
+    aliases:
+      - outgrew single postgres
+      - horizontal partitioning
+      - vacuum cannot keep up
+      - when to shard
+    tech: [postgres]
+  - id: f1
+    kind: failure
+    topics: [schema-data-migration, load-shedding-backpressure]
+    title: Backfill during the shard move saturated replication and stalled reads
+    trigger:
+      text: A backfill job copied tenants to the new shards without a rate limit.
+      locator: "Section: What went wrong"
+    mechanism:
+      text: Replication lag grew on the source replicas, read traffic was routed to lagging replicas, and client retries multiplied the load.
+      locator: "Section: What went wrong"
+    why_defences_failed:
+      text: The lag alert was set for the old steady-state write rate and fired after reads had already degraded.
+      locator: "Section: What went wrong"
+    impact:
+      text: Read latency was elevated for about forty minutes.
+      locator: "Section: What went wrong"
+    fix:
+      text: The backfill was throttled on measured replication lag.
+      locator: "Section: What we changed"
+    aliases:
+      - replication lag during migration
+      - backfill overload
+      - retry storm
+    tech: [postgres]

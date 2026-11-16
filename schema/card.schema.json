@@ -1,0 +1,783 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:precedent:card:1",
+  "title": "Precedent card",
+  "description": "One system at one point in time, described by one public source, with the decisions and failures that source reports. The retrieval unit is a record, cited as <card id>#<record id>. A retracted card is reduced to a tombstone.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "status"
+  ],
+  "if": {
+    "properties": {
+      "status": {
+        "const": "retracted"
+      }
+    }
+  },
+  "then": {
+    "$ref": "#/$defs/tombstone"
+  },
+  "else": {
+    "$ref": "#/$defs/card"
+  },
+  "$defs": {
+    "cardId": {
+      "description": "Permanent slug, equal to the file name without extension: <org>-<year>-<system>, where year is the as_of year (the publication year when as_of is null). When that slug is taken, append -2, -3 and so on; never rename a published card.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "maxLength": 80
+    },
+    "recordRef": {
+      "description": "A decision record in another card.",
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*#d[1-9][0-9]?$"
+    },
+    "day": {
+      "type": "string",
+      "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"
+    },
+    "line": {
+      "description": "Single-line plain text. No markup, links or URLs: cards are served to other people's agents.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 160,
+      "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
+    },
+    "text": {
+      "description": "Plain text in our own words. No markup, links or URLs.",
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 400,
+      "pattern": "^(?![\\s\\S]*(\\]\\(|://|`|<[A-Za-z/!]))[\\s\\S]*$"
+    },
+    "locator": {
+      "description": "Where in the source the statement is made: a section heading, page number, or talk timestamp. A bare URL is not a locator.",
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 160,
+      "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
+    },
+    "fact": {
+      "description": "Something the source itself reports, restated in our own words, with where it says so. Reviewer inference never goes here; it goes in curator_notes.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "text",
+        "locator"
+      ],
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/text"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        }
+      }
+    },
+    "factOrNull": {
+      "description": "null when the source does not report it. Never filled from general knowledge.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/fact"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "workload": {
+      "description": "Workload shapes, not industries. Defined in schema/vocabulary.md.",
+      "enum": [
+        "crud-app",
+        "job-queue",
+        "webhook-delivery",
+        "event-streaming",
+        "realtime-messaging",
+        "feed-fanout",
+        "ledger-payments",
+        "multi-tenant-data",
+        "search-indexing",
+        "read-cache",
+        "rate-limiting",
+        "blob-pipeline",
+        "analytics-pipeline",
+        "control-plane",
+        "auth-session",
+        "coordination"
+      ]
+    },
+    "topic": {
+      "description": "The design question a record answers. Defined in schema/vocabulary.md.",
+      "enum": [
+        "service-boundaries",
+        "datastore-choice",
+        "datastore-partitioning",
+        "replication-failover",
+        "consistency-transactions",
+        "async-processing",
+        "delivery-idempotency",
+        "caching",
+        "load-shedding-backpressure",
+        "tenant-isolation",
+        "schema-data-migration",
+        "deployment-rollout",
+        "capacity-cost",
+        "observability",
+        "dependency-failure"
+      ]
+    },
+    "scaleAxis": {
+      "description": "One ordinal tier, assigned at review, with how it was arrived at. null when the source gives nothing usable for this axis. stated: the tier follows from a number in metrics tagged with this axis. estimated: the reviewer derived it and explains how in note.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "tier",
+        "basis"
+      ],
+      "properties": {
+        "tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "basis": {
+          "enum": [
+            "stated",
+            "estimated"
+          ]
+        },
+        "note": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "scale": {
+      "description": "Tiers. traffic (peak requests or events per second on this system): 0 <10, 1 <100, 2 <1k, 3 <10k, 4 <100k, 5 100k+. data (total stored state of this system): 0 <10 GB, 1 <100 GB, 2 <1 TB, 3 <10 TB, 4 <100 TB, 5 100 TB+. team (engineers who build and operate this system): 0 up to 5, 1 up to 15, 2 up to 50, 3 up to 150, 4 over 150. Leave an axis null when the source supports no single tier: a lower bound alone (one table's size), a company-wide headcount, or the artificial load of a test harness on an experiment card. A card with every axis null has unknown scale: its records are returned by search in a separately labelled group and never as a match for the caller's tier.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "traffic",
+        "data",
+        "team",
+        "metrics"
+      ],
+      "properties": {
+        "traffic": {
+          "$ref": "#/$defs/scaleAxis"
+        },
+        "data": {
+          "$ref": "#/$defs/scaleAxis"
+        },
+        "team": {
+          "$ref": "#/$defs/scaleAxis",
+          "type": [
+            "object",
+            "null"
+          ],
+          "properties": {
+            "tier": {
+              "type": "integer",
+              "maximum": 4
+            }
+          }
+        },
+        "metrics": {
+          "description": "Numbers exactly as the source reports them. Never back-calculated.",
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "axis",
+              "name",
+              "value",
+              "unit",
+              "locator"
+            ],
+            "properties": {
+              "axis": {
+                "description": "The tier this number supports, or other for context that supports none.",
+                "enum": [
+                  "traffic",
+                  "data",
+                  "team",
+                  "other"
+                ]
+              },
+              "name": {
+                "$ref": "#/$defs/line"
+              },
+              "value": {
+                "type": "number"
+              },
+              "unit": {
+                "$ref": "#/$defs/line"
+              },
+              "qualifier": {
+                "description": "peak, average, p99, approximate, 'up to', and the boundary measured (system, service, table, whole company).",
+                "$ref": "#/$defs/line"
+              },
+              "locator": {
+                "$ref": "#/$defs/locator"
+              }
+            }
+          }
+        }
+      }
+    },
+    "appliesFrom": {
+      "description": "An advisory floor: below it, do not copy this decision. null when there is no floor (idempotent delivery matters at any scale) or none can be supported. When several tiers are given, all must be met. The scale a system ran at is never a floor on its own. A curator_judgment floor needs a reported forcing_condition, may only use axes the card has a tier for and may not exceed that tier; a source_stated floor may, since a source can say it acted too early.",
+      "type": [
+        "object",
+        "null"
+      ],
+      "additionalProperties": false,
+      "required": [
+        "basis"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "traffic_tier"
+          ]
+        },
+        {
+          "required": [
+            "data_tier"
+          ]
+        },
+        {
+          "required": [
+            "team_tier"
+          ]
+        }
+      ],
+      "properties": {
+        "traffic_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "data_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 5
+        },
+        "team_tier": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 4
+        },
+        "basis": {
+          "description": "source_stated: the source names a threshold; give it in threshold with its locator, and set each tier to the one containing it. curator_judgment: the reviewer's floor; say in rationale what beyond the observed scale supports it.",
+          "enum": [
+            "source_stated",
+            "curator_judgment"
+          ]
+        },
+        "threshold": {
+          "description": "The threshold as the source states it, with its number and unit. Tiers are coarse; this is the precise value.",
+          "$ref": "#/$defs/text"
+        },
+        "locator": {
+          "$ref": "#/$defs/locator"
+        },
+        "rationale": {
+          "$ref": "#/$defs/text"
+        }
+      },
+      "if": {
+        "properties": {
+          "basis": {
+            "const": "source_stated"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "threshold",
+          "locator"
+        ],
+        "properties": {
+          "rationale": false
+        }
+      },
+      "else": {
+        "required": [
+          "rationale"
+        ],
+        "properties": {
+          "threshold": false,
+          "locator": false
+        }
+      }
+    },
+    "recordBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "kind",
+        "topics",
+        "title",
+        "aliases",
+        "tech"
+      ],
+      "properties": {
+        "topics": {
+          "description": "The design questions this record answers, most relevant first.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/topic"
+          }
+        },
+        "title": {
+          "$ref": "#/$defs/line"
+        },
+        "curator_notes": {
+          "description": "The reviewer's own reading, served under that label and never as the source's claim.",
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "items": {
+            "$ref": "#/$defs/text"
+          }
+        },
+        "aliases": {
+          "description": "Search terms a designer would use for this problem that the record's own wording lacks: symptoms and synonyms.",
+          "type": "array",
+          "maxItems": 15,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 2,
+            "maxLength": 60,
+            "pattern": "^[a-z0-9][a-z0-9 .+/-]*$"
+          }
+        },
+        "tech": {
+          "description": "Filter tags only; never returned without the record they belong to. Tag the technologies the record is about, including one that was replaced. Do not tag rejected alternatives.",
+          "type": "array",
+          "maxItems": 6,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+            "maxLength": 40
+          }
+        }
+      }
+    },
+    "decision": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/recordBase"
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "chosen",
+        "rejected",
+        "forcing_condition",
+        "worked_before",
+        "cost_paid",
+        "outcome",
+        "applies_from"
+      ],
+      "properties": {
+        "kind": {
+          "const": "decision"
+        },
+        "id": {
+          "description": "d1 to d99. Never renumbered or reused once published.",
+          "type": "string",
+          "pattern": "^d[1-9][0-9]?$"
+        },
+        "chosen": {
+          "$ref": "#/$defs/fact"
+        },
+        "rejected": {
+          "description": "Alternatives the source says were considered. Empty when it reports none; never invented.",
+          "type": "array",
+          "maxItems": 4,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "option",
+              "reason",
+              "locator"
+            ],
+            "properties": {
+              "option": {
+                "$ref": "#/$defs/line"
+              },
+              "reason": {
+                "description": "null when the source names the alternative but not why it lost.",
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/text"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "locator": {
+                "$ref": "#/$defs/locator"
+              }
+            }
+          }
+        },
+        "forcing_condition": {
+          "description": "The measured pain or hard requirement that triggered the choice.",
+          "$ref": "#/$defs/factOrNull"
+        },
+        "worked_before": {
+          "description": "The simpler setup that was in place and how long or how far it held. Evidence for the boring option.",
+          "$ref": "#/$defs/factOrNull"
+        },
+        "cost_paid": {
+          "description": "What the choice made harder.",
+          "$ref": "#/$defs/factOrNull"
+        },
+        "outcome": {
+          "description": "What happened afterwards.",
+          "$ref": "#/$defs/factOrNull"
+        },
+        "applies_from": {
+          "$ref": "#/$defs/appliesFrom"
+        },
+        "reversed_by": {
+          "description": "The record in which the same organisation later reports undoing this decision. This record stays in the corpus as history and is served with the pointer.",
+          "$ref": "#/$defs/recordRef"
+        }
+      }
+    },
+    "failure": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/recordBase"
+        }
+      ],
+      "type": "object",
+      "unevaluatedProperties": false,
+      "required": [
+        "trigger",
+        "mechanism",
+        "why_defences_failed",
+        "impact",
+        "fix"
+      ],
+      "properties": {
+        "kind": {
+          "const": "failure"
+        },
+        "id": {
+          "description": "f1 to f99. Never renumbered or reused once published.",
+          "type": "string",
+          "pattern": "^f[1-9][0-9]?$"
+        },
+        "trigger": {
+          "$ref": "#/$defs/factOrNull"
+        },
+        "mechanism": {
+          "description": "How the trigger became an outage, including any amplifier such as a retry storm or lock convoy.",
+          "$ref": "#/$defs/fact"
+        },
+        "why_defences_failed": {
+          "$ref": "#/$defs/factOrNull"
+        },
+        "impact": {
+          "$ref": "#/$defs/factOrNull"
+        },
+        "fix": {
+          "$ref": "#/$defs/factOrNull"
+        }
+      }
+    },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "url",
+        "title",
+        "publisher",
+        "published",
+        "party",
+        "retrieved_at",
+        "reuse_basis"
+      ],
+      "properties": {
+        "url": {
+          "type": "string",
+          "pattern": "^https://[^\\s<>]+$",
+          "maxLength": 300
+        },
+        "archive_url": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^https://[^\\s<>]+$",
+          "maxLength": 400
+        },
+        "title": {
+          "$ref": "#/$defs/line"
+        },
+        "publisher": {
+          "$ref": "#/$defs/line"
+        },
+        "author": {
+          "$ref": "#/$defs/line"
+        },
+        "published": {
+          "type": "string",
+          "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$"
+        },
+        "party": {
+          "description": "first: the organisation that runs the system; required for production and incident cards. third: an independent tester or researcher reporting an experiment.",
+          "enum": [
+            "first",
+            "third"
+          ]
+        },
+        "retrieved_at": {
+          "$ref": "#/$defs/day"
+        },
+        "reuse_basis": {
+          "description": "licensed: the source carries a licence that permits adaptation; name it in license. permission: the publisher agreed. factual_summary: the card restates facts in our own words and stores no source expression.",
+          "enum": [
+            "licensed",
+            "permission",
+            "factual_summary"
+          ]
+        },
+        "license": {
+          "description": "SPDX identifier. Cards are published under CC BY 4.0, so only licences that allow relicensing an adaptation that way qualify; share-alike and non-commercial licences do not.",
+          "enum": [
+            "CC0-1.0",
+            "CC-BY-4.0",
+            "CC-BY-3.0",
+            "MIT",
+            "Apache-2.0",
+            "BSD-2-Clause",
+            "BSD-3-Clause"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "reuse_basis": {
+            "const": "licensed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "license"
+        ]
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "extracted_by",
+        "reviewed_by",
+        "reviewed_at"
+      ],
+      "properties": {
+        "extracted_by": {
+          "description": "Person, or model id and prompt version.",
+          "$ref": "#/$defs/line"
+        },
+        "reviewed_by": {
+          "description": "The human who checked every fact, number and floor against the source.",
+          "$ref": "#/$defs/line"
+        },
+        "reviewed_at": {
+          "$ref": "#/$defs/day"
+        }
+      }
+    },
+    "card": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "title",
+        "org",
+        "system",
+        "architecture",
+        "as_of",
+        "evidence",
+        "workloads",
+        "scale",
+        "source",
+        "review",
+        "status",
+        "records"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/cardId"
+        },
+        "title": {
+          "$ref": "#/$defs/line"
+        },
+        "org": {
+          "$ref": "#/$defs/line"
+        },
+        "system": {
+          "$ref": "#/$defs/line"
+        },
+        "architecture": {
+          "description": "One or two sentences on the overall shape of the system at as_of, so a record served on its own has context.",
+          "$ref": "#/$defs/fact"
+        },
+        "as_of": {
+          "description": "When the reported facts were true (YYYY or YYYY-MM), not when the source was published. null when the source does not say. One card has one as_of and one scale: when a source covers several periods or scales, write one card per period, sharing the source URL.",
+          "type": [
+            "string",
+            "null"
+          ],
+          "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2]))?$"
+        },
+        "evidence": {
+          "description": "What the source establishes. production: an account of a running system. incident: the operator's own post-mortem. experiment: a controlled test such as fault injection.",
+          "enum": [
+            "production",
+            "incident",
+            "experiment"
+          ]
+        },
+        "workloads": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 3,
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/workload"
+          }
+        },
+        "scale": {
+          "$ref": "#/$defs/scale"
+        },
+        "source": {
+          "$ref": "#/$defs/source"
+        },
+        "review": {
+          "$ref": "#/$defs/review"
+        },
+        "status": {
+          "description": "disputed: someone credible contests the card's account; status_note says who and what.",
+          "enum": [
+            "current",
+            "disputed"
+          ]
+        },
+        "status_note": {
+          "$ref": "#/$defs/text"
+        },
+        "records": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "decision",
+                  "failure"
+                ]
+              }
+            },
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "decision"
+                }
+              }
+            },
+            "then": {
+              "$ref": "#/$defs/decision"
+            },
+            "else": {
+              "$ref": "#/$defs/failure"
+            }
+          }
+        }
+      },
+      "if": {
+        "properties": {
+          "status": {
+            "const": "disputed"
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "status_note"
+        ]
+      }
+    },
+    "tombstone": {
+      "description": "What remains of a withdrawn card: enough for an old citation to resolve to 'withdrawn, and why', and nothing of the summary.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "id",
+        "status",
+        "status_note",
+        "retracted_at",
+        "withdrawn_records"
+      ],
+      "properties": {
+        "schema": {
+          "const": 1
+        },
+        "id": {
+          "$ref": "#/$defs/cardId"
+        },
+        "status": {
+          "const": "retracted"
+        },
+        "status_note": {
+          "$ref": "#/$defs/text"
+        },
+        "retracted_at": {
+          "$ref": "#/$defs/day"
+        },
+        "withdrawn_records": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 8,
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "pattern": "^[df][1-9][0-9]?$"
+          }
+        }
+      }
+    }
+  }
+}
