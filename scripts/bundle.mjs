@@ -1,21 +1,18 @@
 #!/usr/bin/env node
 // Builds the copy of the corpus that ships inside the skill: the card files plus a one-line-per-record index.
 // Usage: node scripts/bundle.mjs [--check]   (--check fails if the committed bundle is out of date)
-import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { corpusVersion, readCardSources } from "./corpus.mjs";
 
 const root = resolve(fileURLToPath(import.meta.url), "../..");
 const cardsDir = join(root, "cards");
 const outDir = join(root, "skills/precedent/corpus");
 
-const files = readdirSync(cardsDir).filter((f) => f.endsWith(".yaml")).sort();
-const sources = new Map(files.map((f) => [f, readFileSync(join(cardsDir, f), "utf8")]));
-const hash = createHash("sha256");
-for (const [name, text] of sources) hash.update(name).update("\0").update(text).update("\0");
-const version = hash.digest("hex").slice(0, 12);
+const sources = readCardSources(cardsDir);
+const version = corpusVersion(sources);
 
 const LETTER = { traffic: "T", data: "D", team: "O" };
 // A literal pipe would split the table row.
@@ -52,7 +49,7 @@ const sections = [...byWorkload.keys()].sort().map((w) => `## ${w}\n\n| Record |
 
 const index = `# Precedent corpus index
 
-Corpus version: \`${version}\` (${rows.length} records from ${files.length - withdrawn.length} cards)
+Corpus version: \`${version}\` (${rows.length} records from ${sources.size - withdrawn.length} cards)
 
 Scale is the system's tier on three axes: T traffic, D data, O team (operators). \`?\` means the source gives no usable figure; such records have unknown scale and never count as a match for your tier. Shape is the deployed footprint the source states (single-node, single-database, partitioned, multi-region), which is often the only size signal a small system gives. Floor is the advisory minimum tier for copying a decision, where one exists. Tier definitions are in SKILL.md.
 
