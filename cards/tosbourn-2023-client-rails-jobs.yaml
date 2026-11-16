@@ -1,0 +1,82 @@
+schema: 1
+id: tosbourn-2023-client-rails-jobs
+title: A Tosbourn client's very small Rails app drops Sidekiq and Redis for a Postgres-backed job processor
+org: Unnamed client of Tosbourn Ltd
+system: Client Rails application background jobs
+architecture:
+  text: "A small Rails application whose background jobs go through Active Job. Its jobs had just been moved from Sidekiq, which needs Redis, to GoodJob, which keeps them in Postgres alongside the app's data."
+  locator: "Near: moved a client's ActiveJob processor from Sidekiq"
+as_of: "2023"
+evidence: production
+workloads: [job-queue]
+footprint: null
+scale:
+  # The source gives a daily maximum, not a per-second rate, so the traffic tier
+  # is an estimate with a note.
+  traffic:
+    tier: 0
+    basis: estimated
+    note: "The post gives at most about 20 jobs a day and no per-second figure. A peak of 10 or more per second would need half the day's jobs to arrive in one second, so the reviewer takes tier 0."
+  data: null
+  team: null
+  metrics:
+    - axis: traffic
+      name: jobs handled by the client application
+      value: 20
+      unit: jobs per day
+      qualifier: maybe; at the absolute max, per the author
+      locator: "Section: Why we decided to move"
+    - axis: other
+      name: monthly Redis hosting cost
+      value: 30
+      unit: dollars per month
+      qualifier: about; across the client's environments
+      locator: "Section: Why we decided to move"
+source:
+  url: https://tosbourn.com/replacing-sidekiq-with-goodjob/
+  archive_url: null
+  title: Replacing Sidekiq with GoodJob
+  publisher: tosbourn.com (Tosbourn Ltd blog)
+  author: Toby Osbourn
+  published: "2023-01"
+  party: first
+  retrieved_at: "2026-11-16"
+  reuse_basis: factual_summary
+review:
+  extracted_by: claude-sonnet-5-5
+  reviewed_by: PENDING human review
+  reviewed_at: "2026-11-16"
+status: current
+records:
+  - id: d1
+    kind: decision
+    topics: [datastore-choice, capacity-cost, async-processing]
+    title: Removed Redis and Sidekiq for GoodJob on the existing Postgres database, to cut cost and parts
+    chosen:
+      text: "The contractor replaced the client's Sidekiq job processor, which runs on Redis, with GoodJob, which stores jobs in Postgres and so can reuse the database the app already has."
+      locator: "Near: piggy-back on your existing database"
+    rejected: []
+    forcing_condition: null
+    rationale:
+      text: "Mainly money: the client paid about $30 a month across environments for Redis to run at most about 20 jobs a day. Dropping Redis also simplified the stack, and GoodJob's UI, job history and search were further attractions."
+      locator: "Section: Why we decided to move"
+    worked_before: null
+    cost_paid:
+      text: "Searchable job records raise a data-access concern: job arguments may hold sensitive live data, so the job UI has to be restricted to people allowed to see it."
+      locator: "Near: The ability to search does bring in"
+    outcome:
+      text: "The client's hosting bill fell by $30 a month, and jobs seemed to run at least as fast as before; no benchmarks were run because the jobs are few and infrequent."
+      locator: "Section: First impressions"
+    applies_from: null
+    curator_notes:
+      - The author says the steps suit a very small, simple project, and that here the team deployed without worrying about losing a job in Sidekiq. The post describes no plan for draining or dual-running jobs in flight.
+      - The post is a contractor's account of a client's application, written shortly after the switch. It gives no team size, no database size, no time in production on GoodJob and no incident history.
+      - Cost was a motive, not a pain that forced action; the post praises Sidekiq in general and reports no problem with it in this app.
+    aliases:
+      - remove redis from a small app
+      - redis too expensive for few jobs
+      - sidekiq to postgres
+      - background jobs without redis
+      - database backed active job
+      - cheap background jobs for rails
+    tech: [good-job, sidekiq, redis, postgres, active-job]
