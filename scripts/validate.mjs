@@ -32,7 +32,8 @@ function locators(value, found = []) {
 function textLength(value) {
   if (typeof value === "string") return value.length;
   if (Array.isArray(value)) return value.reduce((n, v) => n + textLength(v), 0);
-  if (value && typeof value === "object") return textLength(Object.values(value));
+  // A locator says where a fact is, and a long heading is not the card's wording: it does not count.
+  if (value && typeof value === "object") return textLength(Object.entries(value).filter(([key]) => key !== "locator").map(([, v]) => v));
   return 0;
 }
 
