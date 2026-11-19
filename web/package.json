@@ -1,0 +1,38 @@
+{
+  "name": "precedent-web",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "corpus": "node ../scripts/web-corpus.mjs",
+    "dev": "npm run corpus && PRECEDENT_LOCAL_STATE=1 alchemy dev",
+    "typecheck": "npm run corpus && tsc --noEmit",
+    "deploy": "npm run corpus && tsc --noEmit && alchemy deploy --stage prod",
+    "cloudflare-login": "alchemy profile edit --add Cloudflare"
+  },
+  "dependencies": {
+    "@tanstack/react-router": "^1.170.46",
+    "@tanstack/react-start": "^1.169.7",
+    "better-auth": "^1.7.26",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@alchemy.run/cloudflare": "^2.0.0-beta.87",
+    "@cloudflare/workers-types": "^5.20261119.1",
+    "@effect/platform-node": "^4.1.4",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.3.0",
+    "alchemy": "^2.0.0-beta.87",
+    "effect": "^4.1.4",
+    "typescript": "^7.0.2",
+    "vite": "^8.3.8",
+    "ws": "^8.23.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "workerd@1.20261116.1": true,
+    "workerd@1.20261118.1": true,
+    "workerd@1.20261026.1": true
+  }
+}
