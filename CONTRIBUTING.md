@@ -98,6 +98,7 @@ The scripts cannot tell whether a fact is filed in the right field or says more 
 
 A feed is a list of leads worked through to cards. Leads come from link lists, newsletters and channels, which are used to find sources and never as sources.
 
+- **Scratch files stay out of the shared directory.** Feeds run in parallel and all save sources to `/tmp/precedent-sources`. Keep only final `<card-id>.txt` files there; put anything temporary in a directory of your own, such as `/tmp/precedent-sources/feed-<n>/`.
 - **Every lead ends in the ledger.** The corpus repository keeps `leads.tsv`: one row per URL with its outcome (`carded`, `deferred`, `dropped`), the card id or the reason, and the date. Check it before fetching, so nothing is fetched twice, and add a row for every lead you fetch.
 - **There is no batch size.** A lead that qualifies gets a card. "The batch was full" and "five stronger leads were in hand" are not reasons: a qualifying lead you cannot finish now is `deferred` with what it would add, and the next feed starts from the deferred rows.
 - **`dropped` needs a reason that is about the source:** not a primary account, too thin to support one record, the same system and period as an existing card, rights reserved, unreachable by either fetcher. A missing scale figure is not a reason; most post-mortems have none and are still wanted.

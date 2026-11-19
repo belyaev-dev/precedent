@@ -25,6 +25,7 @@ What the system does, by shape of load. Never an industry.
 | `auth-session` | Authentication, sessions and tokens |
 | `coordination` | Leader election, locks, consensus and membership |
 | `traffic-routing` | Carrying other systems' traffic to the right place: DNS, anycast and route announcement, load balancing, proxies |
+| `ml-serving` | Producing and serving model output in production: feature, training and inference pipelines, embeddings, ranking and recommendation. Reporting and aggregation without a model is `analytics-pipeline` |
 
 ## Topics
 

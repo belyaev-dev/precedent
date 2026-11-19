@@ -94,3 +94,12 @@ test("a near miss is not a match: longer addresses, compound number words, inexa
   fails((c) => (c.scale.metrics = [{ axis: "other", name: "queries", value: 5004000, unit: "per second", locator: "Section: Background" }]), /value 5004000 not found/);
   fails((c) => (c.architecture.locator = "Secton: Background"), /locator part is not Section:/);
 });
+
+test("names with a dot, hundreds in words, and possessives", () => {
+  const source = SOURCE.replace("on version 3.6.2", "encoding H.264 for more than two hundred billion blocks sent to Discord’s relay, on version 3.6.2");
+  const ok = (change) => { const r = run((c) => ((c.__source = source), change(c))); assert.equal(r.ok, true, r.output); };
+  ok((c) => (c.architecture.text = "Encodes H.264."));
+  ok((c) => (c.architecture.text = "Holds over 200 billion blocks."));
+  ok((c) => (c.architecture.locator = "Near: blocks sent to Discord"));
+  assert.match(run((c) => ((c.__source = source), (c.architecture.text = "Encodes H.265."))).output, /number 265 not found/);
+});
