@@ -42,7 +42,7 @@ The format is defined in [`schema/card.schema.json`](schema/card.schema.json), t
 
 ### Scale
 
-Sources report scale in numbers that cannot be compared directly (monthly users, requests per second, terabytes), so each card carries three ordinal tiers assigned at review, alongside the raw numbers exactly as the source gives them. Each tier says whether it follows from a stated number or is the reviewer's estimate, and is left empty when the source supports neither. Team means the engineers who build and operate that system; a company-wide headcount does not give a team tier. Neither does a lower bound such as one table's size give a data tier.
+Sources report scale in numbers that cannot be compared directly (monthly users, requests per second, terabytes), so each card carries three ordinal tiers assigned at review, alongside the raw numbers exactly as the source gives them. Each tier says whether it follows from a stated number or is the reviewer's estimate, and is left empty when the source supports neither. Team means the engineers who build and operate that system; a company-wide headcount gives a team tier only when the whole company fits in the lowest one. A lower bound such as one table's size gives no data tier, unless it already lies above the top tier's floor. Traffic is load on the operator's own system: what a third-party CDN absorbed is recorded as context, not as a tier.
 
 | Tier | Traffic (peak per second) | Data (stored state) | Team (engineers) |
 |---|---|---|---|
@@ -55,7 +55,7 @@ Sources report scale in numbers that cannot be compared directly (monthly users,
 
 A decision record may also carry `applies_from`, an advisory floor below which the decision should not be copied. A floor is either stated by the source, in which case the card keeps the exact threshold and where it is stated, or it is the reviewer's judgment with a written rationale. The scale a system happened to run at is never treated as a floor on its own, and some records (idempotent delivery, restore testing) have no floor at all.
 
-Small systems rarely publish numbers at all; what their authors do say is "one VM" or "a single database". So a card also records the **footprint** the source states: single node, single database, partitioned, or multi-region. For a small system that is often the only size signal there is, and it is what makes boring setups findable.
+Small systems rarely publish numbers at all; what their authors do say is "one VM" or "a single database". So a card also records the **footprint** the source states: single node, single database, single site, partitioned, or multi-region. For a small system that is often the only size signal there is, and it is what makes boring setups findable.
 
 Many post-mortems give no scale figures. Their records are still searchable; they are returned in a separate group labelled as unknown scale, never as a match for the caller's tier.
 

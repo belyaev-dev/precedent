@@ -29,7 +29,7 @@ All three are marked read-only (`readOnlyHint: true`, `destructiveHint: false`, 
 | `topic` | array, up to 4 | The record's topics; any of. Topics belong to records, so a topic filter leaves systems out. |
 | `tech` | array of tags, up to 4 | For example `postgres`; any of. A system matches through its components and records. |
 | `traffic`, `data`, `team` | integer tier, 0 to 5 (team 0 to 4) | The caller's scale envelope. |
-| `footprint` | array of `single-node`, `single-database`, `partitioned`, `multi-region` | Any of. Leaves out cards whose source states no footprint, and says how many. |
+| `footprint` | array of `single-node`, `single-database`, `single-site`, `partitioned`, `multi-region` | Any of. Leaves out cards whose source states no footprint, and says how many. |
 | `limit` | integer, 1 to 10 | Default 5. |
 
 Every parameter is optional. Unknown parameters and values outside the schema are rejected.

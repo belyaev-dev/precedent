@@ -41,7 +41,7 @@ function searchSchema(index: CorpusIndex) {
     workload: z.array(z.enum(workloads as [string, ...string[]])).max(4).optional().describe("Workload shapes of the system; any of."),
     topic: z.array(z.enum(topics as [string, ...string[]])).max(4).optional().describe("Design questions a record answers; any of. Matches decision and failure records only, so systems drop out."),
     tech: z
-      .array(z.string().max(40).regex(/^[a-z0-9][a-z0-9.+-]*$/))
+      .array(z.string().max(40).regex(/^[a-z0-9][a-z0-9._+-]*$/))
       .max(4)
       .optional()
       .describe("Technology tags in lower case, for example postgres, redis, kafka; any of. precedent_facets lists the tags in use."),

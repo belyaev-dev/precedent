@@ -51,7 +51,7 @@ const index = `# Precedent corpus index
 
 Corpus version: \`${version}\` (${rows.length} records from ${sources.size - withdrawn.length} cards)
 
-Scale is the system's tier on three axes: T traffic, D data, O team (operators). \`?\` means the source gives no usable figure; such records have unknown scale and never count as a match for your tier. Shape is the deployed footprint the source states (single-node, single-database, partitioned, multi-region), which is often the only size signal a small system gives. Floor is the advisory minimum tier for copying a decision, where one exists. Tier definitions are in SKILL.md.
+Scale is the system's tier on three axes: T traffic, D data, O team (operators). \`?\` means the source gives no usable figure; such records have unknown scale and never count as a match for your tier. Shape is the deployed footprint the source states (single-node, single-database, single-site, partitioned, multi-region), which is often the only size signal a small system gives. Floor is the advisory minimum tier for copying a decision, where one exists. Tier definitions are in SKILL.md.
 
 The first table lists the systems, one per card: use it to find examples of how a kind of system is built and to pick a baseline. The tables after it list the decision and failure records, grouped by the card's first workload. Open \`cards/<card id>.yaml\` for the full card before citing anything from it.
 

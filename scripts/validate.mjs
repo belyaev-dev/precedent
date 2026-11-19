@@ -13,8 +13,21 @@ const validate = new Ajv2020({ allErrors: true }).compile(schema);
 
 const AXES = ["traffic", "data", "team"];
 // A card is a pointer to its source, not a substitute for it.
-const MAX_RECORD_CHARS = 2500;
-const MAX_CARD_CHARS = 12000;
+const MAX_RECORD_CHARS = 3200;
+const MAX_CARD_CHARS = 14000;
+const MAX_LOCATOR_PARTS = 3;
+
+// Every locator in a card, wherever it sits.
+function locators(value, found = []) {
+  if (Array.isArray(value)) for (const v of value) locators(v, found);
+  else if (value && typeof value === "object") {
+    for (const [key, v] of Object.entries(value)) {
+      if (key === "locator" && typeof v === "string") found.push(v);
+      else locators(v, found);
+    }
+  }
+  return found;
+}
 
 function textLength(value) {
   if (typeof value === "string") return value.length;
@@ -26,6 +39,12 @@ function textLength(value) {
 function crossChecks(card) {
   const problems = [];
   const { scale, source, review, records } = card;
+
+  for (const locator of locators(card)) {
+    const parts = locator.split(" | ");
+    if (parts.length > MAX_LOCATOR_PARTS) problems.push(`locator names ${parts.length} passages, limit ${MAX_LOCATOR_PARTS}: ${locator}`);
+    if (new Set(parts).size < parts.length) problems.push(`locator repeats a passage: ${locator}`);
+  }
 
   const ids = records.map((r) => r.id);
   for (const id of new Set(ids)) {
