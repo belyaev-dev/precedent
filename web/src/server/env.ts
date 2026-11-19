@@ -3,6 +3,10 @@ import * as cf from "cloudflare:workers";
 
 export interface Env {
   DB: D1Database;
+  // The private bucket holding the compiled corpus. Absent in a checkout without it; the sample cards are served then.
+  CORPUS?: R2Bucket;
+  // The MCP engine in mcp/, which has no public address of its own.
+  MCP: Fetcher;
   // Absent on accounts without Cloudflare Email Service; sign-in by email is then switched off.
   EMAIL?: SendEmail;
   EMAIL_FROM: string;

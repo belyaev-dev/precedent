@@ -12,19 +12,27 @@ export const Route = createFileRoute("/mcp")({
   component: Mcp,
 });
 
-const BRIEF = "job queue, under 100 req/s, team of 5";
-
 function Mcp() {
-  const { workloads, cited } = Route.useLoaderData();
+  const { cited } = Route.useLoaderData();
   const [clientId, setClientId] = useState(INSTALL[0].id);
   const client = INSTALL.find((c) => c.id === clientId)!;
   const tools = [
-    ["search_records", "Decision and failure records that match a described system.", `search_records({ query: "${BRIEF}" })`],
-    ["get_card", "One card in full: the system, its figures as stated, the architecture summary and every record with its source locators.", 'get_card({ id: "notion-2021-postgres-sharding" })'],
-    ["get_record", "One record by its citation id, with the system it belongs to.", 'get_record({ id: "healthchecks-2025-tarpit-outage#f1" })'],
-    ["list_workloads", `The ${workloads} workload names, with the number of cards under each.`, "list_workloads()"],
+    [
+      "precedent_search",
+      "Systems, decisions and failures that match a described problem, grouped by how their scale compares with yours: at your scale, at a different scale, or of unknown scale.",
+      'precedent_search({ query: "job queue on postgres", workload: ["job-queue"], traffic: 1, team: 0 })',
+    ],
+    [
+      "precedent_get",
+      "Up to eight records or systems in full, each fact with its place in the source and an explicit note where the source is silent.",
+      'precedent_get({ ids: ["notion-2021-postgres-sharding#d1", "healthchecks-2025-tarpit-outage"] })',
+    ],
+    ["precedent_facets", "What the corpus covers: its size and version, the tier definitions, and the workloads, topics, tech tags and footprints in use.", "precedent_facets()"],
   ];
-  const calls = [`search_records({ query: "${BRIEF}" })`, `get_card({ id: "${cited[0].cardId}" })`, `get_record({ id: "${cited[2].cite}" })`].join("\n");
+  const calls = [
+    'precedent_search({ query: "background jobs rails", workload: ["job-queue"], traffic: 1, team: 0 })',
+    `precedent_get({ ids: [${cited.map((row) => `"${row.cite}"`).join(", ")}] })`,
+  ].join("\n");
   const lower = (text: string) => text.charAt(0).toLowerCase() + text.slice(1);
 
   return (
@@ -123,8 +131,8 @@ function Mcp() {
           <section className="block">
             <h2 className="sub-title" id="keys">Keys and limits</h2>
             <p>
-              Every call needs a key. A free key allows {count(PLANS.free.calls)} calls a month and returns the top {PLANS.free.searchResults} records per
-              search. Pro allows {count(PLANS.pro.calls)} calls a month, returns every matching record and can search only the records a person has reviewed.{" "}
+              Every request needs a key, sent as a bearer token. A free key allows {count(PLANS.free.calls)} tool calls a month; Pro will allow{" "}
+              {count(PLANS.pro.calls)}. Listing the tools and connecting do not count.{" "}
               <Link className="nowrap" to="/pricing">Pricing →</Link>
             </p>
           </section>

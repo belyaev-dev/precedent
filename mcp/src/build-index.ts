@@ -76,11 +76,6 @@ export function tombstoneOf(item: Tombstone): Tombstone {
   };
 }
 
-/** The cards as they may be published in the static corpus: a withdrawn one is reduced to its tombstone. */
-export function publishable(parsed: (Card | Tombstone)[]): (Card | Tombstone)[] {
-  return parsed.map((item) => (item.status === "retracted" ? tombstoneOf(item) : item));
-}
-
 /** Throws if a card lacks what the server reads. Full validation is scripts/validate.mjs at the repository root. */
 function assertServable(card: Card): void {
   const missing = ["id", "title", "org", "system", "architecture", "workloads", "scale", "source", "review", "records"].filter(

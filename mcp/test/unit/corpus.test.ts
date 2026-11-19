@@ -5,8 +5,7 @@ import { MAX_TOOL_RESULT_BYTES, wireBytes } from "../../src/limits.ts";
 import { renderGet } from "../../src/render.ts";
 import { corpus, repoRoot } from "../helpers.ts";
 
-// These run against what `npm run build` compiled from the real cards.
-const publicDir = join(repoRoot, "mcp/public/corpus");
+// These run against what `npm run build` compiled from the cards in cards/.
 /** wrangler.jsonc with its comments stripped. */
 const config = () => JSON.parse(readFileSync(join(repoRoot, "mcp/wrangler.jsonc"), "utf8").replace(/^\s*\/\/.*$/gm, ""));
 const skillIndex = readFileSync(join(repoRoot, "skills/precedent/corpus/INDEX.md"), "utf8");
@@ -49,31 +48,22 @@ describe("the compiled corpus", () => {
   });
 });
 
-describe("the static corpus", () => {
-  const whole = JSON.parse(readFileSync(join(publicDir, "corpus.json"), "utf8"));
-
-  it("is one file holding every card, stamped with the corpus version", () => {
-    expect(whole.corpus_version).toBe(corpus.version);
-    expect(whole.cards.map((card: { id: string }) => card.id).sort()).toEqual([...Object.keys(corpus.cards), ...Object.keys(corpus.tombstones)].sort());
-  });
-
-  it("has one file per card and no others", () => {
-    const files = readdirSync(join(publicDir, "cards")).sort();
-    expect(files).toEqual(whole.cards.map((card: { id: string }) => `${card.id}.json`).sort());
-    const one = JSON.parse(readFileSync(join(publicDir, "cards", files[0]!), "utf8"));
-    expect(one.corpus_version).toBe(corpus.version);
-    expect(`${one.card.id}.json`).toBe(files[0]);
-  });
-
-  it("is served with open CORS headers and never routed through the Worker", () => {
-    expect(readFileSync(join(repoRoot, "mcp/public/_headers"), "utf8")).toMatch(/^\/corpus\/\*\n\s+Access-Control-Allow-Origin: \*/);
-    expect(existsSync(join(repoRoot, "mcp/public/index.html"))).toBe(true);
-    // Comments stripped, the configuration must leave run_worker_first unset, which means false.
-    expect(config().assets).toEqual({ directory: "./public" });
-  });
-});
-
 describe("the Worker's configuration", () => {
+  it("is for local development only: no public route, no static assets, no production environment, and no deployment of its own", () => {
+    const configuration = config();
+    for (const key of ["assets", "routes", "route", "env", "workers_dev", "preview_urls", "vars", "triggers"]) expect(configuration, key).not.toHaveProperty(key);
+    expect(JSON.stringify(configuration)).not.toMatch(/precedents\.dev|custom_domain|\.workers\.dev/);
+    expect(existsSync(join(repoRoot, "mcp/public"))).toBe(false);
+  });
+
+  it("binds the private corpus bucket as CORPUS, which wrangler dev gives an empty local copy of", () => {
+    expect(config().r2_buckets).toEqual([{ binding: "CORPUS", bucket_name: "precedent-corpus" }]);
+  });
+
+  it("keeps the Node compatibility flag the MCP handler needs", () => {
+    expect(config().compatibility_flags).toContain("nodejs_compat");
+  });
+
   it("logs the Worker's own lines only: no invocation logs, and tracing explicitly off", () => {
     expect(config().observability).toEqual({ enabled: true, logs: { invocation_logs: false }, traces: { enabled: false } });
   });

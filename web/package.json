@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "corpus": "node ../scripts/web-corpus.mjs",
+    "corpus": "node ../scripts/web-corpus.mjs && node ../mcp/scripts/build-corpus.mjs",
     "dev": "npm run corpus && PRECEDENT_LOCAL_STATE=1 alchemy dev",
     "typecheck": "npm run corpus && tsc --noEmit",
     "deploy": "npm run corpus && tsc --noEmit && alchemy deploy --stage prod",

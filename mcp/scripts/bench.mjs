@@ -4,7 +4,7 @@
 //   isolate  CPU-profiler samples taken inside the Worker's isolate under `wrangler dev` (workerd),
 //            counted and multiplied by the sampling interval. The closest local stand-in for Worker CPU time.
 //   process  CPU time the whole local workerd process used, per request. An upper bound: it includes
-//            HTTP handling, the runtime, and wrangler's own proxy and asset-routing Workers.
+//            HTTP handling, the runtime, and wrangler's own proxy Worker.
 //   node     CPU time per request of the same handler called in-process under Node (same V8 family, no HTTP).
 // Local numbers on a developer machine are not production numbers. Use them for the order of magnitude.
 // Usage: node scripts/bench.mjs [requests per scenario, default 400]
@@ -51,7 +51,8 @@ const stop = () => {
 process.on("exit", stop);
 
 for (let i = 0; ; i++) {
-  if (await fetch(`${origin}/corpus/corpus.json`).then((r) => r.ok, () => false)) break;
+  // Any path but /mcp is answered by the Worker with a 404 that carries its header, so this is up once the Worker is.
+  if (await fetch(`${origin}/`).then((r) => r.headers.get("x-precedent-worker") === "1", () => false)) break;
   if (i > 200) throw new Error("wrangler dev did not come up");
   await new Promise((r) => setTimeout(r, 250));
 }
@@ -127,7 +128,7 @@ const legacy = (method, params) => {
       check(response.status, await response.text());
     },
     node: async () => {
-      const response = await worker.fetch(new Request("http://127.0.0.1/mcp", { method: "POST", headers: { ...HEADERS, host: "127.0.0.1" }, body: body() }), {}, {});
+      const response = await worker.fetch(new Request("http://127.0.0.1/mcp", { method: "POST", headers: { ...HEADERS, host: "127.0.0.1" }, body: body() }), {}, { waitUntil() {} });
       check(response.status, await response.text());
     },
   };
@@ -165,8 +166,9 @@ const scenarios = [
   ["precedent_get, one record", legacy("tools/call", { name: "precedent_get", arguments: { ids: ["slack-2017-job-queue#f1"] } })],
   ["precedent_get, eight ids", legacy("tools/call", { name: "precedent_get", arguments: { ids: eightIds } })],
   ["precedent_facets", legacy("tools/call", { name: "precedent_facets", arguments: {} })],
-  // The floor: a static file never enters the Worker's isolate, so what is left is the local runtime's own cost.
-  ["static file /corpus/cards/<id>.json (Worker not invoked)", { http: async () => void (await (await fetch(`${origin}/corpus/cards/slack-2017-job-queue.json`)).arrayBuffer()) }],
+  // The floor: the Worker's own 404 for any other path answers without the index or the protocol layer, so
+  // what is left is the local runtime's cost plus the Worker's routing.
+  ["GET /nowhere (404 from the Worker's router)", { http: async () => void (await (await fetch(`${origin}/nowhere`)).arrayBuffer()) }],
 ];
 
 const repeat = async (request, count) => {

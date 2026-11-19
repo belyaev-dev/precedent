@@ -1,5 +1,4 @@
 node_modules/
 .wrangler/
 src/generated/
-public/corpus/
 worker-configuration.d.ts

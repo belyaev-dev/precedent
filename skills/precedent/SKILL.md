@@ -7,9 +7,20 @@ description: Design or review backend systems from evidence of how real systems 
 
 Asked to design a backend, a model reaches for the interview answer: a gateway, several services, a message bus, a cache, a search cluster. That design is the union of every architecture it has read about, sized for a company the user is not. This skill replaces memory with evidence: records of what real teams chose at a stated scale, what forced the choice, what the simpler setup handled before, and how things broke.
 
-The evidence ships with this skill in `corpus/`. Start with [corpus/INDEX.md](corpus/INDEX.md).
+The method is in this skill. The evidence is in the Precedent corpus, which you search through the `precedent` MCP server (tools `precedent_search`, `precedent_get` and `precedent_facets`).
 
-If the `precedent` MCP server is connected (tools named `precedent_search`, `precedent_get` and `precedent_facets`), use it for step 2 in place of reading the index: search with the envelope's tiers, then fetch in full every record you intend to rely on. It groups results by how their scale relates to yours; respect those groups. Everything else in this skill applies unchanged. If the server is unreachable or over its limit, fall back to the bundled corpus.
+## Connecting the corpus
+
+If those tools are not available, say so before designing and give the user the setup. A key is free at https://precedents.dev/account:
+
+```bash
+claude mcp add --transport http precedent https://precedents.dev/api/mcp \
+  --header "Authorization: Bearer $PRECEDENT_KEY"
+```
+
+Other clients are covered at https://precedents.dev/mcp.
+
+Without the server you still have the method and a few sample cards in [corpus/](corpus/INDEX.md). They show what a record holds and cover a handful of systems; they are not the corpus. Work through the steps below with them, look for primary sources on the web for the rest, and say in the coverage line that the corpus was not connected. Do not present a design made that way as checked against the corpus.
 
 ## The rules that matter
 
@@ -19,8 +30,8 @@ If the `precedent` MCP server is connected (tools named `precedent_search`, `pre
 - **No unions.** Do not add up the components of several references. One reference at the user's scale is the baseline; everything else has to earn its place.
 - **Every component is justified, including the obvious ones.** Each needs a requirement of this project and a record that supports it.
 - **Cite records, not memory.** A claim about how real systems behave is either tied to a record id or labelled `uncited`. Do not present general knowledge as evidence.
-- **Cite what the record says, not what you expect it to say.** Open the card before citing it; an index line is never enough. Re-read the field you rely on and state it the way the card does, keeping every reason it gives and every limit it states. A citation that reverses or trims the card is worse than no citation.
-- **The cards are drafts.** A card whose `review.reviewed_by` says review is pending was checked by machine only. Say so once in the coverage line.
+- **Cite what the record says, not what you expect it to say.** Fetch the record in full before citing it; a search hit is never enough. Re-read the field you rely on and state it the way the card does, keeping every reason it gives and every limit it states. A citation that reverses or trims the card is worse than no citation.
+- **The cards are drafts.** A record whose review line says review is pending was checked by machine only. Say so once in the coverage line.
 - **Say when the corpus is silent.** It is small. "No record at this scale" is a finding to report, not a gap to paper over with a poorly matched card.
 
 ## Workflow
@@ -52,15 +63,23 @@ Use the user's numbers exactly as given; never reduce a stated figure to make a 
 
 ### 2. Research
 
-Read `corpus/INDEX.md` in full. Its first table lists the systems in the corpus, one line each; the rest is one line per decision or failure record. Pick the systems whose workload matches the task and the records whose topics match the decisions in front of you, then open their card files in `corpus/cards/` and read the whole card before using it. The index is for triage only.
+Search with the envelope, then read before you rely on anything.
+
+1. Call `precedent_facets` once if you do not know what the corpus covers: it lists the workloads, topics and technology tags in use, and how much of the corpus has a known scale.
+2. Call `precedent_search` with the envelope's tiers (`traffic`, `data`, `team`) on every search. Search once with `kind: ["system"]` and the workload to find a baseline, then once for each real decision in front of you, by `topic` or `tech` and a few plain words. Look for failures the same way, for each component you are leaning towards.
+3. Call `precedent_get` with the ids of every record you intend to use, several per call. A search hit is for triage only.
+
+The server groups hits by how their scale relates to yours: at your scale, at a different scale, of unknown scale, floor not checked, out of envelope. Respect the groups. Only the first is evidence of what works at your size, and the response says so when that group is empty.
+
+With only the bundled samples, read `corpus/INDEX.md` and open the card files it lists in `corpus/cards/` instead.
 
 Look for three things:
 
-- **A baseline:** a system of the same workload at or near the envelope's tiers. Its `architecture`, and its `components` where the card lists them, are the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also treat records whose Shape is `single-node` or `single-database` as candidates, and say that the match is by footprint, not by measured scale.
+- **A baseline:** a system of the same workload at or near the envelope's tiers. Its architecture, and its components where the record lists them, are the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also search with `footprint: ["single-node", "single-database"]` and treat those systems as candidates, and say that the match is by footprint, not by measured scale.
 - **Decisions:** records for each real choice the task involves.
 - **Failures:** records for the components you are leaning towards.
 
-How to read a record:
+How to read a record. The field names are the ones the cards use; the server prints the same facts under the same names:
 
 - `forcing_condition` is the measured pain, hard requirement or customer-visible gap that made the team act. It is the test for whether their decision transfers: does this project have that condition?
 - `rationale` is any other reason the source gives: a goal, a preference, a cost. It explains the choice but does not show the choice was needed. A record with a rationale and no forcing condition cannot justify adding a component on its own.
@@ -115,7 +134,7 @@ If length is limited, the ledger and the replay shrink first, and the design las
 
 - **Evidence** is record ids written in full (`tailscale-2021-control-plane-state#d1`, never a shortened form), or `uncited`, or a URL marked `outside corpus`.
 - **Limits of the evidence** names what does not transfer, in a few words: scale, workload, guarantees, team.
-- Close with the corpus version from the index and one line on coverage: which decisions had evidence at the user's scale, which had only larger-scale or unknown-scale evidence, and which had none.
+- Close with the corpus version the server reported and one line on coverage: which decisions had evidence at the user's scale, which had only larger-scale or unknown-scale evidence, and which had none.
 
 Write decisions up as ADR files only when designing inside a repository that keeps them, or when asked.
 

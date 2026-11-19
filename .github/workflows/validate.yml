@@ -37,6 +37,22 @@ jobs:
       # Unit tests, then end-to-end tests against the Worker running locally under wrangler dev.
       - run: npm test
         working-directory: mcp
-      # Builds the deployable bundle and prints its size. A dry run: nothing is uploaded.
+      # Bundles the Worker and prints its size. A dry run: nothing is uploaded, and the Worker is not deployed
+      # from here (the website's Alchemy deployment in web/ does that).
       - run: npm run size
         working-directory: mcp
+  web:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      # The website's type check compiles the sample cards with the root and engine scripts first.
+      - run: npm ci
+      - run: npm ci
+        working-directory: mcp
+      - run: npm ci
+        working-directory: web
+      - run: npm run typecheck
+        working-directory: web

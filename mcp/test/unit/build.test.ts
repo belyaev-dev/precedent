@@ -1,10 +1,10 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it } from "vitest";
 import { parse, stringify } from "yaml";
-import { buildIndex, publishable } from "../../src/build-index.ts";
+import { buildIndex } from "../../src/build-index.ts";
 import type { Card, Tombstone } from "../../src/types.ts";
 import { corpus, repoRoot } from "../helpers.ts";
 
@@ -12,6 +12,14 @@ const fixtures = join(repoRoot, "mcp/test/fixtures/cards");
 const TOMBSTONE_KEYS = ["id", "retracted_at", "schema", "status", "status_note", "withdrawn_records"];
 const scratch = mkdtempSync(join(tmpdir(), "precedent-build-"));
 afterAll(() => rmSync(scratch, { recursive: true, force: true }));
+
+/** Every file under a directory, as paths relative to it. */
+function filesUnder(dir: string): string[] {
+  return readdirSync(dir, { recursive: true, withFileTypes: true })
+    .filter((entry) => entry.isFile())
+    .map((entry) => join(entry.parentPath, entry.name).slice(dir.length + 1))
+    .sort();
+}
 
 /** Runs the real build script on a directory of cards, writing under a scratch directory instead of mcp/. */
 function build(cardsDir: string, name: string) {
@@ -35,20 +43,34 @@ function cardsDirWith(name: string, files: Record<string, unknown>): string {
 }
 
 describe("the corpus build", () => {
-  it("publishes a withdrawn card as its tombstone only, in the per-card file and in the whole corpus", () => {
+  it("writes the index and nothing else: no copy of the cards, no per-card files, no build stamp", () => {
     const { out, status, log } = build(fixtures, "ok");
     expect(status, log).toBe(0);
+    expect(filesUnder(out)).toEqual(["src/generated/corpus.json"]);
+    expect(log).toMatch(/^corpus [0-9a-f]{12}: \d+ systems/);
+  });
 
-    const one = JSON.parse(readFileSync(join(out, "public/corpus/cards/gone-2021-cache.json"), "utf8"));
-    expect(Object.keys(one.card).sort()).toEqual(TOMBSTONE_KEYS);
-    const whole = JSON.parse(readFileSync(join(out, "public/corpus/corpus.json"), "utf8"));
-    const inWhole = whole.cards.find((card: { id: string }) => card.id === "gone-2021-cache");
-    expect(Object.keys(inWhole).sort()).toEqual(TOMBSTONE_KEYS);
-    expect(whole.cards.map((card: { id: string }) => card.id).sort()).toEqual(readdirSync(fixtures).map((name) => name.replace(".yaml", "")).sort());
-
+  it("writes exactly the index the Worker bundles and the corpus bucket holds: the version, the cards, the tombstones", () => {
+    const { out } = build(fixtures, "index");
     const index = JSON.parse(readFileSync(join(out, "src/generated/corpus.json"), "utf8"));
-    expect(Object.keys(index.cards)).not.toContain("gone-2021-cache");
+    expect(index.version).toMatch(/^[0-9a-f]{12}$/);
+    expect(Object.keys(index).sort()).toEqual(["cards", "docs", "facets", "postings", "prefixes", "tombstones", "version", "vocabulary"]);
+    expect(Object.keys(index.cards).sort()).toEqual(readdirSync(fixtures).map((name) => name.replace(".yaml", "")).filter((id) => id !== "gone-2021-cache").sort());
     expect(Object.keys(index.tombstones)).toEqual(["gone-2021-cache"]);
+    // A withdrawn card is its tombstone and nothing else, and none of it is indexed.
+    expect(Object.keys(index.tombstones["gone-2021-cache"]).sort()).toEqual(TOMBSTONE_KEYS);
+    expect(index.docs.some((doc: { card: string }) => doc.card === "gone-2021-cache")).toBe(false);
+  });
+
+  it("writes the same bytes when run again, and does not touch a file whose content has not changed", () => {
+    const first = build(fixtures, "again");
+    const path = join(first.out, "src/generated/corpus.json");
+    const before = readFileSync(path, "utf8");
+    const modified = statSync(path).mtimeMs;
+    const second = build(fixtures, "again");
+    expect(second.status, second.log).toBe(0);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    expect(statSync(path).mtimeMs).toBe(modified);
   });
 
   it("stops, and writes nothing, when a retracted card still carries its content", () => {
@@ -76,12 +98,8 @@ describe("the corpus build", () => {
     expect(existsSync(crossCheck.out)).toBe(false);
   });
 
-  it("would still publish only the tombstone if a retracted card with content got past validation", () => {
+  it("would still keep only the tombstone if a retracted card with content got past validation", () => {
     const leftover = retractedWithContent() as unknown as Tombstone;
-    const [published] = publishable([leftover]);
-    expect(Object.keys(published!).sort()).toEqual(TOMBSTONE_KEYS);
-    expect(JSON.stringify(published)).not.toMatch(/SQLite|Tiny \(fictional\)|example\.com|architecture|"records"/);
-
     const index = buildIndex([leftover as unknown as Card], "fixture00002", corpus.vocabulary);
     expect(index.docs).toEqual([]);
     expect(index.cards).toEqual({});

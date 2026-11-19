@@ -42,11 +42,14 @@ Read the whole saved file before writing anything. Every fact in a card comes fr
 
 ## Checking
 
+Cards are kept in the private corpus repository, cloned beside this one. Check a card with this repository's scripts:
+
 ```bash
-npm run check
-node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
-npm run bundle   # refresh the copy inside the skill, then commit it
+node scripts/validate.mjs ../precedent-cards/cards
+node scripts/check-source.mjs ../precedent-cards/cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
 ```
+
+A few cards are also published here in `cards/` as samples. After changing one, run `npm run bundle` to refresh the copy inside the skill, then `npm run check`.
 
 Never weaken a true fact or edit the saved source to get a pass. If the source does not support a fact, remove the fact.
 
@@ -54,4 +57,4 @@ Then have someone who did not write the card, or a different model, read it agai
 
 ## Review
 
-A card drafted by a model carries `reviewed_by: PENDING human review` until a person has read it against the source and put their name there. Open a pull request per batch and say in it which facts you are least sure of.
+A card drafted by a model carries `reviewed_by: PENDING human review` until a person has read it against the source and put their name there. Open a pull request per batch in the corpus repository and say in it which facts you are least sure of. Merging it publishes the cards: a workflow there compiles them and uploads the result for the server and the website to read.

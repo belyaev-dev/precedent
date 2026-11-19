@@ -94,15 +94,23 @@ describe("precedent_get on more than fits", () => {
     expect(result.text.match(/^applies_from /gm)).toHaveLength(result.found - 1);
   });
 
-  it("says so honestly when a single id is more than the tool will ever send, and points at the file", () => {
+  it("says plainly when even one record is more than the tool will send, and does not invent a way out", () => {
+    const result = renderGet(index, [`${cardIds[0]}#d1`], { maxBytes: 3000 });
+    expect(result.text).toContain(`TOO LARGE ${cardIds[0]}#d1: it is in the corpus, but it renders to more than this tool sends in one response. This tool cannot return it.`);
+    expect(result.text).not.toMatch(/static|\.json|https?:/);
+    expect(result).toMatchObject({ found: 0, leftOut: 0, missing: 1 });
+  });
+
+  it("says so honestly when a single id is more than the tool will ever send, and says what can still be asked for", () => {
     // A limit that one record with its card's context fits under, and a whole system does not.
     const record = wireBytes(renderGet(index, [`${cardIds[1]}#d1`]).text);
     const system = wireBytes(renderGet(index, [cardIds[0]!]).text);
     const maxBytes = record + 3000;
     expect(maxBytes).toBeLessThan(system);
-    const result = renderGet(index, [cardIds[0]!, `${cardIds[1]}#d1`], { maxBytes, origin: "https://precedent.example" });
+    const result = renderGet(index, [cardIds[0]!, `${cardIds[1]}#d1`], { maxBytes });
     expect(wireBytes(result.text)).toBeLessThanOrEqual(maxBytes);
-    expect(result.text).toContain(`TOO LARGE ${cardIds[0]}: it is in the corpus, but it renders to more than this tool sends in one response. Read it in the static corpus: https://precedent.example/corpus/cards/${cardIds[0]}.json`);
+    expect(result.text).toContain(`TOO LARGE ${cardIds[0]}: it is in the corpus, but it renders to more than this tool sends in one response. Ask for its records one at a time, as ${cardIds[0]}#<record id>; a search shows their ids.`);
+    expect(result.text.split("\n").find((line) => line.startsWith("TOO LARGE"))).not.toMatch(/static|\.json|https?:/);
     // The smaller id asked for with it is still served.
     expect(result.text).toContain(`RECORD ${cardIds[1]}#d1 (decision)`);
     expect(result).toMatchObject({ found: 1, leftOut: 0, missing: 1 });
@@ -143,14 +151,14 @@ describe("the Worker on more than fits", () => {
 
 describe("any tool result over the limit", () => {
   it("becomes an honest error that says how big it was and what to do", () => {
-    const small = answer("fine", "Lower `limit`.", "https://precedent.example");
+    const small = answer("fine", "Lower `limit`.");
     expect(small).toEqual({ content: [{ type: "text", text: "fine" }] });
 
     const oversized = "\u3042".repeat(Math.ceil(MAX_TOOL_RESULT_BYTES / 3) + 1);
-    const big = answer(oversized, "Lower `limit`, or narrow the search.", "https://precedent.example");
+    const big = answer(oversized, "Lower `limit`, or narrow the search.");
     expect("isError" in big && big.isError).toBe(true);
     expect(big.content[0]!.text).toBe(
-      `This answer would be ${wireBytes(oversized)} bytes, more than the ${MAX_TOOL_RESULT_BYTES} this endpoint sends in one response, so it was not sent. Lower \`limit\`, or narrow the search. The whole corpus is a static file with no such limit: https://precedent.example/corpus/corpus.json`,
+      `This answer would be ${wireBytes(oversized)} bytes, more than the ${MAX_TOOL_RESULT_BYTES} this endpoint sends in one response, so it was not sent. Lower \`limit\`, or narrow the search.`,
     );
     expect(wireBytes(big.content[0]!.text)).toBeLessThan(1024);
   });

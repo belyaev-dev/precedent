@@ -1,18 +1,21 @@
 // What the pages ask the server for. Each function returns only what its page shows.
 import { notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
-import { FREE_RESULTS } from "../site";
 import { currentUser } from "../server/session";
 import { repoStars } from "../server/stars";
-import { cards, entries, findRecord, isReviewed, row, search, version, workloadGroups, type Query } from "./store.server";
-
-export const getCorpusVersion = createServerFn({ method: "GET" }).handler(() => version);
+import { FREE_RESULTS } from "../site";
+import { corpus, isReviewed, sampleIds, type Query } from "./store.server";
+import type { RecordRow } from "./types";
 
 // What the header and footer of every page show.
-export const getSiteInfo = createServerFn({ method: "GET" }).handler(async () => ({ version, stars: await repoStars() }));
+export const getSiteInfo = createServerFn({ method: "GET" }).handler(async () => ({ version: (await corpus()).version, stars: await repoStars() }));
 
-export const getLanding = createServerFn({ method: "GET" }).handler(() => {
-  const featured = findRecord("notion-2021-postgres-sharding#d1");
+export const getCorpusVersion = createServerFn({ method: "GET" }).handler(async () => (await corpus()).version);
+
+export const getLanding = createServerFn({ method: "GET" }).handler(async () => {
+  const { cards, entries, findRecord, workloadGroups } = await corpus();
+  // Always a sample card, so it is present whichever corpus is being served.
+  const featured = findRecord("notion-2021-postgres-sharding#d1")!;
   const orgs = [...new Set(cards.map((card) => card.org))]
     .filter((org) => !/^(Not named|Unnamed)/.test(org))
     .sort((a, b) => a.localeCompare(b, "en", { sensitivity: "base" }));
@@ -37,7 +40,8 @@ export const searchRecords = createServerFn({ method: "GET" })
     setup: strings(input?.setup),
   }))
   .handler(async ({ data }) => {
-    const matched = search(data).map(({ card, record }) => row(card, record));
+    const { cards, entries, search, workloadGroups } = await corpus();
+    const matched = search(data);
     const signedIn = (await currentUser()) !== null;
     return {
       rows: signedIn ? matched : matched.slice(0, FREE_RESULTS),
@@ -48,18 +52,25 @@ export const searchRecords = createServerFn({ method: "GET" })
     };
   });
 
+// A sample card is open to anyone. Any other card is shown in full to a signed-in reader, and as an
+// outline (what the system is and which records it holds) to everyone else.
 export const getCard = createServerFn({ method: "GET" })
   .validator((id: string) => String(id))
-  .handler(({ data: id }) => {
+  .handler(async ({ data: id }) => {
+    const { cards, row } = await corpus();
     const card = cards.find((c) => c.id === id);
     if (!card) throw notFound();
-    return card;
+    if (sampleIds.has(card.id) || (await currentUser())) return { locked: false as const, card };
+    const { id: cardId, title, org, system, as_of, evidence, source } = card;
+    return { locked: true as const, outline: { id: cardId, title, org, system, as_of, evidence, source, records: card.records.map((record) => row(card, record)) } };
   });
 
-export const getMcpExample = createServerFn({ method: "GET" }).handler(() => ({
-  workloads: workloadGroups().length,
-  cited: ["tosbourn-2023-client-rails-jobs#d1", "37signals-2023-solid-queue#d1", "brandur-2015-postgres-job-queue#f1"].map((cite) => {
-    const { card, record } = findRecord(cite);
-    return row(card, record);
-  }),
-}));
+export const getMcpExample = createServerFn({ method: "GET" }).handler(async () => {
+  const { findRecord, row } = await corpus();
+  const cited: RecordRow[] = [];
+  for (const cite of ["tosbourn-2023-client-rails-jobs#d1", "37signals-2023-solid-queue#d1", "brandur-2015-postgres-job-queue#f1"]) {
+    const found = findRecord(cite);
+    if (found) cited.push(row(found.card, found.record));
+  }
+  return { cited };
+});

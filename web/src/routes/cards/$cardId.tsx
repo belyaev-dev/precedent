@@ -8,11 +8,14 @@ import { KIND, SETUP, sentence } from "../../site";
 const EVIDENCE = { production: "Reported from production", incident: "Incident report", experiment: "Experiment" };
 
 export const Route = createFileRoute("/cards/$cardId")({
-  loader: async ({ params }) => ({ card: await getCard({ data: params.cardId }), version: await getCorpusVersion() }),
-  head: ({ loaderData }) => ({
-    meta: loaderData ? [{ title: `${loaderData.card.title}: Precedent` }, { name: "description", content: loaderData.card.architecture.text }] : [],
-  }),
-  component: CardPage,
+  loader: async ({ params }) => ({ found: await getCard({ data: params.cardId }), version: await getCorpusVersion() }),
+  head: ({ loaderData }) => {
+    if (!loaderData) return {};
+    const { found } = loaderData;
+    const title = found.locked ? found.outline.title : found.card.title;
+    return { meta: [{ title: `${title}: Precedent` }, ...(found.locked ? [] : [{ name: "description", content: found.card.architecture.text }])] };
+  },
+  component: CardRoute,
 });
 
 function Meta({ label, children }: { label: string; children: ReactNode }) {
@@ -45,8 +48,65 @@ function Table({ heads, rows }: { heads: string[]; rows: ReactNode[][] }) {
   );
 }
 
-function CardPage() {
-  const { card, version } = Route.useLoaderData();
+type Found = Awaited<ReturnType<typeof getCard>>;
+
+function CardRoute() {
+  const { found, version } = Route.useLoaderData();
+  return found.locked ? <Outline outline={found.outline} /> : <CardPage card={found.card} version={version} />;
+}
+
+// What a visitor who is not signed in sees of a card outside the public samples.
+function Outline({ outline }: { outline: Extract<Found, { locked: true }>["outline"] }) {
+  return (
+    <main className="page">
+      <div className="card-page">
+        <p className="crumbs">
+          <Link to="/cards">Catalogue</Link> / {outline.id}
+        </p>
+        <h1 className="card-title">{outline.title}</h1>
+        <p className="lede">
+          {[outline.org, outline.as_of?.slice(0, 4)].filter(Boolean).join(", ")}. {sentence(outline.system)}.
+        </p>
+
+        <dl className="meta">
+          <Meta label="Organisation">{outline.org}</Meta>
+          <Meta label="Evidence">{EVIDENCE[outline.evidence]}</Meta>
+          <Meta label="Source">
+            <a href={outline.source.url}>{outline.source.title}</a>
+            <p className="locator">
+              {outline.source.publisher}, published {outline.source.published}
+            </p>
+          </Meta>
+        </dl>
+
+        <section className="block">
+          <h2 className="section-title">Records</h2>
+          {outline.records.map((record) => (
+            <article className="record" id={record.recordId} key={record.recordId}>
+              <p className="record-kind">
+                <span className="label">{KIND[record.kind]}</span>
+                <a href={`#${record.recordId}`}>#{record.recordId}</a>
+              </p>
+              <h3 className="record-title">{record.title}</h3>
+            </article>
+          ))}
+          <div className="locked">
+            <svg aria-hidden="true" width="14" height="16" viewBox="0 0 14 16" fill="none" stroke="#111111" strokeWidth="1.2">
+              <rect x="1.6" y="7" width="10.8" height="8" />
+              <path d="M4 7V4.5a3 3 0 0 1 6 0V7" />
+            </svg>
+            <p>
+              <Link to="/account">Sign in</Link> to read what was chosen, what was rejected and what it cost, each with its place in the source. An
+              account is free.
+            </p>
+          </div>
+        </section>
+      </div>
+    </main>
+  );
+}
+
+function CardPage({ card, version }: { card: Extract<Found, { locked: false }>["card"]; version: string }) {
   const pending = /^pending/i.test(card.review.reviewed_by);
   return (
     <main className="page">

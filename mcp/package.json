@@ -2,7 +2,7 @@
   "name": "precedent-mcp",
   "private": true,
   "type": "module",
-  "description": "Read-only MCP server for the Precedent corpus, on Cloudflare Workers.",
+  "description": "Read-only MCP engine for the Precedent corpus: an internal Cloudflare Worker behind the website's keyed endpoint.",
   "license": "MIT",
   "dependencies": {
     "@modelcontextprotocol/server": "^2.4.0",

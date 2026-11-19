@@ -1,30 +1,35 @@
 # precedent
 
-Evidence for system design. Precedent is a corpus of short, reviewed records of how real systems were built and how they failed, plus an agent skill that makes a coding agent consult that evidence before it designs a backend.
+Evidence for system design. Precedent is a corpus of short, source-checked records of how real systems were built and how they failed, an MCP server that lets a coding agent search it, and a skill that makes the agent consult that evidence before it designs a backend. The website is [precedents.dev](https://precedents.dev).
 
 It exists because agents design from memory, and memory produces the interview answer: a gateway, five services, a message bus, a cache and a search cluster, whatever the product's actual load. Precedent aims to give the agent something better to reason from: what a team at a comparable scale chose, what forced the choice, what the simpler setup handled before that, and what broke.
 
-> **Status: pilot.** The corpus holds a first batch of draft cards. Each was extracted by a model from its source and checked against that source by a second model and by script, but **none has yet been reviewed by a person**; every card says so in its `review` block. Treat them as leads to verify, not as settled fact. The skill and an MCP server are first versions. See [Roadmap](#roadmap).
+> **Status: pilot.** The corpus holds a first batch of draft cards. Each was extracted by a model from its source and checked against that source by a second model and by script, but **none has yet been reviewed by a person**; every card says so in its `review` block. Treat them as leads to verify, not as settled fact. The skill, the server and the website are first versions. See [Roadmap](#roadmap).
 
 ## Using it
 
-Install the skill, which carries its own copy of the corpus and needs nothing else:
+Get a free API key at [precedents.dev/account](https://precedents.dev/account) and connect the MCP server:
+
+```bash
+claude mcp add --transport http precedent https://precedents.dev/api/mcp \
+  --header "Authorization: Bearer $PRECEDENT_KEY"
+```
+
+Then install the skill, which holds the method the agent follows:
 
 ```bash
 npx skills add belyaev-dev/precedent
 ```
 
-Optionally connect the hosted MCP server, so an agent can search the corpus by scale and topic instead of reading the whole index:
+Other clients, the tools and the limits are described at [precedents.dev/mcp](https://precedents.dev/mcp). The corpus can also be read on the website, in the [catalogue](https://precedents.dev/cards).
 
-```bash
-claude mcp add --transport http precedent https://mcp.precedents.dev/mcp
-```
+## Where the corpus is
 
-The server is public and read-only, and needs no account. The same corpus is available as static files at `https://mcp.precedents.dev/corpus/corpus.json`.
+This repository holds the tools, the schema, the server, the website and a few sample cards in [`cards/`](cards/). The corpus itself is kept in a private repository and is reached through the server and the website, not from here. When cards change there, a workflow validates them with the scripts in this repository, compiles them and uploads the result to a private bucket that the server and the website read. Nothing needs to be redeployed.
 
 ## How it is organised
 
-A **card** is one YAML file in [`cards/`](cards/). It describes one system at one point in time, as reported by one public source: its overall architecture, and optionally its main components and what each is for. A source that covers several periods or scales becomes one card per period. Each card holds up to eight **records**, and the record is what an agent retrieves and cites:
+A **card** is one YAML file; the samples in [`cards/`](cards/) are real ones. It describes one system at one point in time, as reported by one public source: its overall architecture, and optionally its main components and what each is for. A source that covers several periods or scales becomes one card per period. Each card holds up to eight **records**, and the record is what an agent retrieves and cites:
 
 - A **decision** record: what was chosen, what was rejected, the measured pain that forced the choice, any other reason the source gives, the simpler setup that worked before, the cost paid, and the outcome.
 - A **failure** record: the trigger, the mechanism that turned it into an outage, why the defences did not hold, the impact, and the fix.
@@ -74,33 +79,26 @@ A card never contains the source's prose, diagrams, code, or quotes beyond a few
 5. Before presenting a design, search failures for each chosen component and walk the design through them.
 6. Emit a decision ledger: choice, requirement, citations, where the evidence does not transfer, the simpler alternative, and the revisit trigger.
 
-The skill ships with a copy of the cards so it works with no server.
+The skill carries the method and the sample cards. It reaches the corpus through the MCP server, and says so when the server is not connected.
 
-**MCP server.** A read-only, unauthenticated endpoint on Cloudflare Workers with a small tool surface: one search across records (query, kind, scale envelope, topic, workload, tech) and one batched fetch of full records. Search separates results that fall outside the caller's envelope and reports honestly when the corpus has nothing at that scale. No model runs at request time.
+**MCP server.** A read-only endpoint with a small tool surface: one search across records (query, kind, scale envelope, topic, workload, tech, footprint), one batched fetch of full records, and one description of what the corpus covers. Search separates results that fall outside the caller's envelope and reports honestly when the corpus has nothing at that scale. No model runs at request time.
 
-**Static corpus.** The full corpus is also published as a single file, so nobody needs to scrape the endpoint and the skill has a fallback when the endpoint's daily quota runs out.
+**Website.** The catalogue, a page per card, accounts and API keys.
 
-## MCP server
+## How it runs
 
-[`mcp/`](mcp/) holds the server described above, as a Cloudflare Worker. It is live at `https://mcp.precedents.dev/mcp` on Cloudflare's Free plan, so it has a daily request quota; when that is spent the static corpus keeps working. It is redeployed automatically when the cards or the server change on `main`, and every response states the corpus version it serves.
+Two Cloudflare Workers, declared together in [`web/alchemy.run.ts`](web/alchemy.run.ts):
 
-- Three read-only tools: `precedent_search` (keywords plus kind, workload, topic, tech, footprint and the caller's scale envelope), `precedent_get` (up to eight records or systems per call) and `precedent_facets` (what the corpus covers).
+- **The website**, in [`web/`](web/): a [TanStack Start](https://tanstack.com/start) app at precedents.dev. It holds accounts ([Better Auth](https://better-auth.com) on D1, with GitHub and magic-link sign-in), one API key per user and a monthly count of tool calls. Its `/api/mcp` route is the public MCP address: it checks the key, counts the call and passes the request on.
+- **The MCP engine**, in [`mcp/`](mcp/): the search and the three tools. It has no public address and is reachable only from the website's Worker.
+
+Both read the compiled corpus from the private `precedent-corpus` R2 bucket about once a minute, and fall back to the sample cards bundled at build time. Card text reaches a browser only through the website's server, never in its JavaScript. The sample cards are readable by anyone; every other card is shown in full to a signed-in reader and as an outline to everyone else.
+
+- Three read-only tools: `precedent_search`, `precedent_get` (up to eight records or systems per call) and `precedent_facets`.
 - Search groups hits as at the caller's scale, at a different scale, of unknown scale, floor not checked, or out of envelope, and reports the count in each group. A card with no tier on an axis the caller gave is never a match for that tier.
 - Every result carries a ready citation, each fact's locator, "not stated in the source" for gaps, the card's review status and the corpus version. Withdrawn ids resolve to a notice.
-- The build validates the cards first and stops on a failure. It also writes the corpus as static files, `/corpus/corpus.json` and one file per card, which are served without invoking the Worker; a withdrawn card appears there as its tombstone only.
-- No model runs at request time and nothing is stored. The index is compiled into the Worker from `cards/` at build time.
 
-Tool parameters, example responses, limits, what is logged, measurements and the deployment steps are in [`mcp/README.md`](mcp/README.md).
-
-## Sources
-
-Primary sources only: accounts by the organisation that runs the system of how it is built, why it changed, or how it failed, plus peer-reviewed systems papers and independent test reports. A plain "here is our architecture" post is as welcome as a migration story or a post-mortem; the corpus is meant to hold examples of real production systems, not only their turning points. Link lists such as `danluu/post-mortems` and `awesome-scalability` are used to find sources, not as sources. Interview-preparation material, secondary summaries, and vendor reference architectures are out of scope for now.
-
-A card restates facts in our own words and stores none of the source's expression. A source is not used at all when its publisher has said it does not want that: a no-derivatives licence, terms that forbid summarising or reuse, an explicit reservation of rights against AI use of the content, or a direct request. Where a card does lean on a source's licence, that licence must allow republishing an adaptation under CC BY 4.0, which share-alike and non-commercial licences do not.
-
-This project's tooling fetches one page at a time, on a person's instruction, to summarise it with attribution. It never fetches a page when the site's `robots.txt` disallows all crawlers, disallows this tool by name, or disallows the agents that AI assistants use to fetch a page for a user (`Claude-User`, `ChatGPT-User` and the like). A rule aimed only at training-data crawlers such as `GPTBot` or `ClaudeBot` is not treated as a refusal, because cards are not training data and nothing is collected in bulk. A person may still read a refused post in their own browser and write a card from it by hand. [`scripts/fetch-source.mjs`](scripts/fetch-source.mjs) enforces this: it identifies itself honestly, and a block is never worked around with another user agent or a stealth browser. Fetched text is kept outside the repository and is never committed.
-
-Each card records when its facts were true, when the source was published, when it was retrieved, and who reviewed it, or that review is still pending.
+Tool parameters, example responses, limits and measurements are in [`mcp/README.md`](mcp/README.md). Plan limits are in [`web/src/site.ts`](web/src/site.ts).
 
 ## Corrections and removal
 
@@ -108,37 +106,56 @@ If a card misstates its source, is out of date, or you are the publisher and wan
 
 - **Corrections** keep the card and record ids.
 - **Reversals**, where an organisation later reports undoing a decision, do not delete the old record. It stays as history with a pointer to the newer one.
-- **Withdrawn cards** are reduced to a tombstone holding only the id, the date and the reason, so an old citation resolves to "withdrawn" instead of to nothing. The summary is removed from the current corpus and from every later export and skill bundle; copies already installed cannot be recalled. It remains in git history unless the publisher asks for that to be rewritten too.
+- **Withdrawn cards** are reduced to a tombstone holding only the id, the date and the reason, so an old citation resolves to "withdrawn" instead of to nothing. The summary is removed from the corpus the server and the website serve. For a sample card, it is also removed from this repository and the skill bundle; copies already installed cannot be recalled.
 
 ## Roadmap
 
-1. **Pilot.** About twenty records for three workload shapes, at least a third of them from small systems. Run fixed design briefs with and without the skill and with plain web research, and compare component count, uncited decisions, and whether each citation says what the design claims. If the cards do not change the designs, fix the format before writing more.
-2. **Server.** Put the same cards behind the Worker; measure CPU per request and database rows read to choose between a bundled index and D1.
+1. **Review.** Have a person read each card against its source, starting with one workload.
+2. **Benchmark over the server.** The results in [`bench/`](bench/) measured the skill reading cards from disk. Run the same briefs with the skill searching through the MCP server.
 3. **Corpus.** Grow by workload shape, deep before wide.
+4. **Pro plan.** Higher limits, and private cards: a team's own decision records and post-mortems searched beside the corpus.
 
 ## Contributing
 
-Cards are written under the rules in [CONTRIBUTING.md](CONTRIBUTING.md). Source suggestions are welcome as issues.
+Cards are written under the rules in [CONTRIBUTING.md](CONTRIBUTING.md). The corpus is not open to pull requests; suggest a source or report a mistake in an issue.
 
 ## Development
 
 ```bash
 npm install
-npm run validate   # checks every card in cards/ and schema/examples/
+npm run check      # validates the sample cards and the skill bundle
 
 # Writing a card: fetch the source text to a file outside the repo, then check the card against it.
 node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
-node scripts/check-source.mjs cards/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
-```
-
-The server has its own package and tests:
-
-```bash
-npm ci && cd mcp && npm ci && npm test
+node scripts/check-source.mjs <path>/<card-id>.yaml /tmp/precedent-sources/<card-id>.txt
 ```
 
 `check-source` confirms that every number in a card, and every `Section:` or `Near:` locator, appears in the source text. Page and timestamp locators are not checked. It catches invented figures and misplaced citations; it cannot tell whether a sentence means what the card says, which is what human review is for.
 
+The engine has its own package and tests:
+
+```bash
+cd mcp && npm ci && npm test
+```
+
+The website runs locally with everything it needs, and no Cloudflare login. Run these inside `web/`; Alchemy is installed there and its CLI fails from the repository root.
+
+```bash
+cd web && npm install
+npm run dev                # http://localhost:4173, serving the sample cards
+npm run typecheck
+npm run cloudflare-login   # once, before the first deploy; opens the browser
+npm run deploy             # both Workers, the database, the bucket and the domain
+```
+
+In local development sign-in emails are not sent; each one is written to `web/.alchemy/local/email/`. The GitHub button appears when `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` are set in `web/.env`.
+
+To compile a directory of cards into the two files the Workers read, as the private repository's workflow does:
+
+```bash
+node scripts/compile-corpus.mjs --cards <dir> --out <dir>   # writes index.json and cards.json
+```
+
 ## Licence
 
-Code is under the [MIT licence](LICENSE). Cards are under [CC BY 4.0](LICENSE-cards); attribute them as "Precedent contributors" with a link to this repository. Cards summarise third-party sources, which remain the property of their publishers; the licence covers our wording, not theirs.
+Code is under the [MIT licence](LICENSE). The sample cards in `cards/` and in the skill bundle are under [CC BY 4.0](LICENSE-cards); attribute them as "Precedent contributors" with a link to this repository. The rest of the corpus is not published here and is not under an open licence. Cards summarise third-party sources, which remain the property of their publishers; a licence covers our wording, not theirs.

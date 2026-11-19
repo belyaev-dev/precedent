@@ -29,16 +29,16 @@ function Pricing() {
     <main className="page">
       <h1 className="display pricing-title">Free to try. Pro for daily use.</h1>
       <div className="plans">
-        <Plan name="Free" price="$0" lines={[`${count(PLANS.free.calls)} calls a month.`, `Top ${PLANS.free.searchResults} records per search.`, "The whole catalogue on the website."]} action="Get a key" />
+        <Plan
+          name="Free"
+          price="$0"
+          lines={[`${count(PLANS.free.calls)} tool calls a month.`, "The whole corpus, over MCP and on the website.", "One API key."]}
+          action="Get a key"
+        />
         <Plan
           name="Pro"
           price={PLANS.pro.price}
-          lines={[
-            `${count(PLANS.pro.calls)} calls a month.`,
-            "Every matching record.",
-            "Search only the records a person has reviewed.",
-            "Not open yet. Sign in and ask to be told when it is.",
-          ]}
+          lines={[`${count(PLANS.pro.calls)} tool calls a month.`, "Everything in Free.", "Not open yet. Sign in and ask to be told when it is."]}
           action="Join the Pro list"
         />
       </div>
@@ -57,15 +57,15 @@ function Pricing() {
             </dd>
           </div>
           <div>
-            <dt>What licence is the corpus under?</dt>
+            <dt>May I use what I read at work?</dt>
             <dd>
-              CC BY-NC 4.0. Using records to design your own systems is fine on every plan, at work too. Republishing or selling the cards needs a
-              commercial licence; <a href={`${REPO}/issues/new?title=Commercial+licence`}>ask for one</a>.
+              Yes. Records are there to inform the systems you design, on either plan. The corpus itself is not open: do not republish or resell
+              the cards. A few sample cards are public in the <a href={REPO}>repository</a> under CC BY 4.0.
             </dd>
           </div>
           <div>
             <dt>What happens when I reach the limit?</dt>
-            <dd>Searches stop until the month resets. Nothing is charged unless you upgrade.</dd>
+            <dd>Tool calls are refused until the month resets. Nothing is charged, on either plan.</dd>
           </div>
         </dl>
       </section>

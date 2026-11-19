@@ -40,7 +40,7 @@ function SignIn({ methods }: { methods: Extract<Account, { signedIn: false }>["m
         <h1 className="page-title">Sign in</h1>
       </div>
       <p className="lede" style={{ marginTop: 20 }}>
-        A key is free and allows {count(PLANS.free.calls)} calls a month. Signing in also opens the full catalogue.
+        A key is free and allows {count(PLANS.free.calls)} tool calls a month. Signing in also opens every card on this site.
       </p>
 
       {methods.github && (
@@ -144,11 +144,10 @@ function SignedIn({ account }: { account: Extract<Account, { signedIn: true }> }
         <div className="plan-line">
           <span className="plan-name">{account.plan === "pro" ? "Pro" : "Free"}</span>
           {account.plan === "pro" ? (
-            <p>{count(PLANS.pro.calls)} calls a month, every matching record and search limited to human-reviewed records.</p>
+            <p>{count(PLANS.pro.calls)} tool calls a month.</p>
           ) : (
             <p>
-              {count(PLANS.free.calls)} calls a month, the top {PLANS.free.searchResults} records per search and the latest corpus version. Pro will be{" "}
-              {PLANS.pro.price}.{" "}
+              {count(PLANS.free.calls)} tool calls a month and the whole corpus. Pro will be {PLANS.pro.price} for {count(PLANS.pro.calls)} calls.{" "}
               {account.wantsPro ? (
                 "You are on the list; we will email you when it opens."
               ) : (

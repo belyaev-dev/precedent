@@ -1,15 +1,20 @@
 {
+  // For local development and tests only: `wrangler dev` and the end-to-end suite read this file. This Worker
+  // is not deployed with wrangler. It has no public route; the website Worker in ../web reaches it over a
+  // service binding, and that deployment (Alchemy) declares its own bindings.
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "precedent-mcp",
   "main": "src/worker.ts",
   "compatibility_date": "2026-11-01",
   // agents/mcp/server uses AsyncLocalStorage.
   "compatibility_flags": ["nodejs_compat"],
-  // Compiles cards/*.yaml into the bundled index and the static corpus before every dev run and deploy.
+  // Compiles cards/*.yaml into the bundled index before every dev run. That index is what the Worker serves
+  // whenever the CORPUS bucket below has no index.json, as it does locally unless one is put there.
   "build": { "command": "node scripts/build-corpus.mjs", "watch_dir": ["src", "scripts", "../cards", "../schema"] },
-  // run_worker_first stays at its default (false): a request that matches a file here is served by the
-  // platform and never invokes the Worker, so the static corpus survives the Worker's daily request quota.
-  "assets": { "directory": "./public" },
+  // The private bucket the full index is read from, as index.json, at run time. Locally wrangler gives the
+  // binding an empty bucket of its own (nothing is read from or written to the real one), so the Worker
+  // falls back to the bundled index.
+  "r2_buckets": [{ "binding": "CORPUS", "bucket_name": "precedent-corpus" }],
   "ratelimits": [
     {
       "name": "RATE_LIMITER",
@@ -17,28 +22,12 @@
       "namespace_id": "1001",
       // Per client address (per /64 for IPv6), per Cloudflare location, approximate. Period must be 10 or 60
       // seconds. 120 a minute is a brake on a runaway loop, set high enough for a dozen agent sessions behind
-      // one shared address; the README says how it was chosen. It does not protect the daily request quota.
+      // one shared address; the README says how it was chosen. The binding is optional in the code, and the
+      // end-to-end suite uses this one to test the limiter.
       "simple": { "limit": 120, "period": 60 }
     }
   ],
   // Keep the Worker's own count lines (no query text, no addresses). Do not record request metadata,
   // and keep tracing off explicitly, so that a later compatibility date cannot switch it on.
-  "observability": { "enabled": true, "logs": { "invocation_logs": false }, "traces": { "enabled": false } },
-  "workers_dev": true,
-  // Production is the custom domain only: deploy with `--env production`. The workers.dev address is off
-  // there, because a request to it would still cost a Worker invocation even when refused for its host,
-  // bypassing the rate limiting rule on the zone. Bindings and vars are not inherited, so the limiter is repeated.
-  "env": {
-    "production": {
-      "name": "precedent-mcp",
-      "workers_dev": false,
-      // Version preview URLs are a second address outside the zone, so they are off as well.
-      "preview_urls": false,
-      "routes": [{ "pattern": "mcp.precedents.dev", "custom_domain": true }],
-      // Browser pages on this hostname and on localhost may call the endpoint. To allow pages elsewhere too,
-      // add "ALLOWED_ORIGIN_HOSTNAMES": "app.example.org" (comma-separated; added to the defaults).
-      "vars": { "ALLOWED_HOSTNAMES": "mcp.precedents.dev" },
-      "ratelimits": [{ "name": "RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 120, "period": 60 } }]
-    }
-  }
+  "observability": { "enabled": true, "logs": { "invocation_logs": false }, "traces": { "enabled": false } }
 }

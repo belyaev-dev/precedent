@@ -264,7 +264,7 @@ export interface GetResult {
  * measured on the wire): once the next id would not fit, it and those after it are named as left out,
  * to be fetched in another call. Nothing is cut mid-record, and the result is never larger than maxBytes.
  */
-export function renderGet(index: CorpusIndex, ids: string[], { maxBytes = MAX_TOOL_RESULT_BYTES, origin = "" } = {}): GetResult {
+export function renderGet(index: CorpusIndex, ids: string[], { maxBytes = MAX_TOOL_RESULT_BYTES } = {}): GetResult {
   // Card id -> what was asked of it, in first-seen order, so a card's context is printed once.
   const wanted = new Map<string, { full: boolean; records: string[] }>();
   const notices: string[] = [];
@@ -344,8 +344,12 @@ export function renderGet(index: CorpusIndex, ids: string[], { maxBytes = MAX_TO
   }
 
   if (tooLarge.length) {
+    // A system lists its record ids, and a record is a part of it, so the way out for a system is to ask for its records one at a time.
     notices.push(
-      ...tooLarge.map((id) => `TOO LARGE ${id}: it is in the corpus, but it renders to more than this tool sends in one response. Read it in the static corpus: ${origin}/corpus/cards/${id.split("#")[0]}.json`),
+      ...tooLarge.map(
+        (id) =>
+          `TOO LARGE ${id}: it is in the corpus, but it renders to more than this tool sends in one response. ${id.includes("#") ? "This tool cannot return it." : `Ask for its records one at a time, as ${id}#<record id>; a search shows their ids.`}`,
+      ),
     );
   }
   if (leftOut.length) {
