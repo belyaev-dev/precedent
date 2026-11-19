@@ -129,7 +129,8 @@
         "observability",
         "dependency-failure",
         "backup-restore",
-        "model-pipeline"
+        "model-pipeline",
+        "network-transport"
       ]
     },
     "scaleAxis": {
