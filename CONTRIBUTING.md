@@ -60,6 +60,7 @@ Read the whole saved file before writing anything. Every fact in a card comes fr
 - Traffic is load on the operator's own system in normal service. Requests a third-party CDN absorbed, and a one-off abuse spike, are context: record them as metrics tagged `other`, with the boundary in the `qualifier`.
 - Data counts each stored item once. When the source gives only on-disk volume across replicas, set a tier only if the replicated and the unreplicated reading land in the same tier.
 - A total across a fleet (twelve clusters, every instance) is the system's figure only when the card's system is that fleet; say "total across ..." in the `qualifier`.
+- The tier is for the card's own system. A monitoring service's card does not take the traffic of the system it watches; that figure is context, tagged `other`.
 - A metric tagged with an axis supports that axis's tier. A number about traffic, data or people that supports no tier is tagged `other`.
 - Fill `footprint` whenever the source states the deployed shape. For a small system it is often the only size signal. The shape has to be stated, not inferred from where the system is hosted. `single-site` covers several machines in one place that split no dataset; several clusters are `partitioned` only when the source says one dataset is divided among them.
 - `applies_from` is null unless the source states a threshold, or there is a reason beyond "it ran at this scale".

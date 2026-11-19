@@ -14,7 +14,17 @@ if pathlib.Path(__file__).resolve().parents[1] in out.parents:
 with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
     page = browser.new_page()
     page.goto(url, timeout=60000, wait_until="domcontentloaded")
-    page.wait_for_timeout(5000)
+    page.wait_for_timeout(4000)
+    # Long posts load their later sections as the reader reaches them: walk to the bottom until the page stops growing.
+    height = 0
+    for _ in range(40):
+        page.mouse.wheel(0, 2500)
+        page.wait_for_timeout(350)
+        grown = page.evaluate("() => document.documentElement.scrollHeight")
+        at_bottom = page.evaluate("() => window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 5")
+        if at_bottom and grown == height:
+            break
+        height = grown
     text = page.evaluate(
         """() => {
           const words = e => e.innerText.split(/\s+/).length;
