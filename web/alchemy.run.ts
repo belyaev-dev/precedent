@@ -2,14 +2,18 @@
 // the bucket holding the compiled corpus, sign-in email and the precedents.dev domain.
 // `alchemy dev` runs it locally; `alchemy deploy --stage prod` publishes it.
 import * as Cloudflare from "@alchemy.run/cloudflare";
+import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 
 const DOMAIN = "precedents.dev";
 const MAIL_DOMAIN = `mail.${DOMAIN}`;
 const DEV_PORT = 4173;
+// The private repository whose workflow compiles the cards and uploads them to the bucket.
+const CARDS_REPO = { owner: "belyaev-dev", repository: "precedent-cards" };
 
 export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
 export const Email = Cloudflare.Email.SendEmail("Email");
@@ -22,12 +26,23 @@ const optionalSecret = (name: string) => Config.Redacted(name).pipe(Config.withD
 export default Alchemy.Stack(
   "Precedent",
   // Local development keeps its state on disk, so it needs no Cloudflare login. Deploys keep theirs in the account.
-  { providers: Cloudflare.providers(), state: process.env.PRECEDENT_LOCAL_STATE ? Alchemy.localState() : Cloudflare.state() },
+  { providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()), state: process.env.PRECEDENT_LOCAL_STATE ? Alchemy.localState() : Cloudflare.state() },
   Effect.gen(function* () {
     const live = (yield* Alchemy.Stage) === "prod";
     if (live) {
       const zone = Cloudflare.Zone.Zone.lookup({ name: DOMAIN });
       yield* Cloudflare.Email.SendingSubdomain("Mail", { zoneId: zone.zoneId, name: MAIL_DOMAIN });
+    }
+    if (live) {
+      // What the cards repository's workflow needs to upload: a token that can write R2 objects and nothing else.
+      const { accountId } = yield* yield* Cloudflare.CloudflareEnvironment;
+      const uploader = yield* Cloudflare.ApiToken.AccountApiToken("CorpusUploader", {
+        name: "precedent-corpus-upload",
+        accountId,
+        policies: [{ effect: "allow", permissionGroups: ["Workers R2 Storage Write"], resources: { [`com.cloudflare.api.account.${accountId}`]: "*" } }],
+      });
+      yield* GitHub.Secret("UploadToken", { ...CARDS_REPO, name: "CLOUDFLARE_API_TOKEN", value: uploader.value });
+      yield* GitHub.Secret("UploadAccount", { ...CARDS_REPO, name: "CLOUDFLARE_ACCOUNT_ID", value: Redacted.make(accountId) });
     }
     const authSecret = yield* Alchemy.Random("AuthSecret");
 

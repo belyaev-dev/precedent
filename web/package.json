@@ -6,7 +6,7 @@
     "corpus": "node ../scripts/web-corpus.mjs && node ../mcp/scripts/build-corpus.mjs",
     "dev": "npm run corpus && PRECEDENT_LOCAL_STATE=1 alchemy dev",
     "typecheck": "npm run corpus && tsc --noEmit",
-    "deploy": "npm run corpus && tsc --noEmit && alchemy deploy --stage prod",
+    "deploy": "npm run corpus && tsc --noEmit && GITHUB_TOKEN=\"${GITHUB_TOKEN:-$(gh auth token)}\" alchemy deploy --stage prod",
     "cloudflare-login": "alchemy profile edit --add Cloudflare"
   },
   "dependencies": {
@@ -18,6 +18,7 @@
   },
   "devDependencies": {
     "@alchemy.run/cloudflare": "^2.0.0-beta.87",
+    "@alchemy.run/github": "^2.0.0-beta.87",
     "@cloudflare/workers-types": "^5.20261119.1",
     "@effect/platform-node": "^4.1.4",
     "@types/react": "^19.3.0",
