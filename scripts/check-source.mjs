@@ -33,10 +33,15 @@ function numberForms(value) {
   for (const [divisor, suffixes] of [[1e3, ["k", " thousand"]], [1e6, ["m", " million", "mm"]], [1e9, ["b", "bn", " billion"]], [1e12, ["t", " trillion"]]]) {
     // 2200000000 / 1e9 is 2.2000000000000002 in floating point; round to the two decimals a source would print.
     const scaled = Math.round((value / divisor) * 100) / 100;
+    // "¼ million", "a quarter of a million", "half a billion"
+    for (const [part, spellings] of [[0.25, ["¼", "a quarter", "quarter of a", "a quarter of a"]], [0.5, ["½", "half a", "half"]], [0.75, ["¾", "three quarters of a"]]])
+      if (value === part * divisor) forms.push(...suffixes.filter((x) => x.startsWith(" ")).flatMap((x) => spellings.map((w) => `${w}${x}`)));
     if (scaled < 1 || Math.round(scaled * divisor) !== value) continue; // only a value the short form states exactly
     for (const s of suffixes) forms.push(`${scaled}${s}`);
     // "five million", "twelve thousand", "two hundred billion"
     const spelled = WORDS[scaled] ?? (scaled % 100 === 0 && WORDS[scaled / 100] ? `${WORDS[scaled / 100]} hundred` : null);
+    // "a billion events"
+    if (scaled === 1) forms.push(...suffixes.filter((x) => x.startsWith(" ")).map((x) => `a${x}`));
     if (spelled) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${spelled}${s}`));
   }
   // "two hundred"
@@ -48,14 +53,17 @@ const NOT_AFTER_TENS = "(?<!(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ni
 const hasNumber = (value, written = String(value)) =>
   (WORDS[value] && new RegExp(`${NOT_AFTER_TENS}${WORDS[value]}\\b`).test(source)) ||
   (value === 12 && /(?<!half )\ba dozen\b/.test(source)) ||
+  // A card's "1 billion" for the source's "a billion".
+  (value === 1 && /(?<!half |of )\ba (?:thousand|million|billion|trillion)\b/.test(source)) ||
   [written, ...numberForms(value)].some((form) =>
-    /^[a-z]/.test(form)
-      ? new RegExp(`${NOT_AFTER_TENS}${form}\\b`).test(source)
+    /^[a-z¼½¾]/.test(form)
+      ? new RegExp(`${/^[a-z]/.test(form) ? NOT_AFTER_TENS : "(?<!\\d)"}${/^a /.test(form) ? "(?<!half |of )" : ""}${form}\\b`).test(source)
       : // A plain number may carry a unit ("80ms", "4.2GB"); a short form may not run on ("5m" is not in "5ms").
         // A dot after a letter is part of a name (H.264), not a decimal point.
         new RegExp(`(^|[^\\d.]|(?<!\\d)\\.)${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d${/[a-z]$/.test(form) ? "|[a-z]" : ""})`).test(sourceDigits),
   );
 
+const headings = readFileSync(sourcePath, "utf8").split("\n").filter((line) => line.startsWith("#")).map((line) => words(line).join(" "));
 const problems = [];
 // A fact drawn from several passages names each one, joined by " | ".
 const MAX_LOCATOR_PARTS = 3;
@@ -72,6 +80,8 @@ function checkLocator(locator, where) {
     // Matched word by word, so quotation marks, code ticks and punctuation in the source do not get in the way.
     const needle = words(match[2]);
     if (!needle.length || !sourceWords.includes(` ${needle.join(" ")} `)) problems.push(`${where}: locator text not found in source: ${part.trim()}`);
+    // A heading the page uses twice does not say which passage is meant.
+    if (match[1] === "Section" && headings.filter((h) => h === needle.join(" ")).length > 1) problems.push(`${where}: the heading "${match[2]}" appears more than once in the source; use Near: with words from the passage`);
     if (match[1] === "Near" && match[2].trim().split(/\s+/).length > 8) problems.push(`${where}: a Near locator may quote at most eight words`);
   }
 }

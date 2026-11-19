@@ -129,7 +129,7 @@ if (!page.ok) {
 }
 // A retired article often redirects to a home or marketing page that answers 200 with plenty of prose.
 // The article's own name must survive the redirect.
-const slug = target.pathname.split("/").filter(Boolean).pop()?.replace(/\.html?$/, "").toLowerCase();
+const slug = target.pathname.split("/").filter(Boolean).pop()?.replace(/\.html?$/, "").replace(/^\d{4}-\d{2}-\d{2}-/, "").toLowerCase(); // a blog that drops the date from its addresses has not lost the article
 if (page.redirected && slug && !new URL(page.url).pathname.toLowerCase().includes(slug)) {
   console.error(`${url} redirected to ${page.url}, which is not the same article. Nothing written.\nIf the article moved there, fetch that address instead.`);
   process.exit(4);

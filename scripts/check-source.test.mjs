@@ -109,3 +109,18 @@ test("thousands grouped with an apostrophe are read as one number", () => {
   const r = run((c) => ((c.__source = source), (c.architecture.text = "Serves over 11,000 checks.")));
   assert.equal(r.ok, true, r.output);
 });
+
+test("fractions of a million and \"a billion\" are read as numbers", () => {
+  const source = SOURCE.replace("on version 3.6.2", "on over ¼ million nodes handling a billion events and half a million users, on version 3.6.2");
+  const ok = (text) => { const r = run((c) => ((c.__source = source), (c.architecture.text = text))); assert.equal(r.ok, true, r.output); };
+  ok("Runs on over 250,000 nodes.");
+  ok("Handles 1 billion events.");
+  ok("Serves 500,000 users.");
+  assert.match(run((c) => ((c.__source = source), (c.architecture.text = "Serves 1,000,000 users."))).output, /number 1000000 not found/);
+});
+
+test("a Section locator may not name a heading the source uses twice", () => {
+  const source = SOURCE + "\n## Background\n\nA second section under the same heading says more about the service.\n";
+  assert.match(run((c) => (c.__source = source)).output, /appears more than once/);
+});
+
