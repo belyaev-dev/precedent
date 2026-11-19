@@ -25,7 +25,7 @@ with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
         sys.exit(f"HTTP {response.status} for {url}; nothing written")
     # A retired article often redirects to a home page; the article's own name must survive the redirect.
     segments = [part for part in urlparse(url).path.split("/") if part]
-    slug = re.sub(r"\.html?$", "", segments[-1]).lower() if segments else ""
+    slug = re.sub(r"^\d{4}-\d{2}-\d{2}-|\.html?$", "", segments[-1]).lower() if segments else ""
     if slug and slug not in urlparse(page.url).path.lower():
         sys.exit(f"{url} redirected to {page.url}, which is not the same article; nothing written")
     page.wait_for_timeout(4000)
