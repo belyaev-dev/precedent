@@ -103,3 +103,9 @@ test("names with a dot, hundreds in words, and possessives", () => {
   ok((c) => (c.architecture.locator = "Near: blocks sent to Discord"));
   assert.match(run((c) => ((c.__source = source), (c.architecture.text = "Encodes H.265."))).output, /number 265 not found/);
 });
+
+test("thousands grouped with an apostrophe are read as one number", () => {
+  const source = SOURCE.replace("on version 3.6.2", "from over 11’000 checks, on version 3.6.2");
+  const r = run((c) => ((c.__source = source), (c.architecture.text = "Serves over 11,000 checks.")));
+  assert.equal(r.ok, true, r.output);
+});
