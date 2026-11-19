@@ -107,7 +107,8 @@
         "auth-session",
         "coordination",
         "traffic-routing",
-        "ml-serving"
+        "ml-serving",
+        "stateless-service"
       ]
     },
     "topic": {
