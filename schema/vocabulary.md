@@ -50,3 +50,4 @@ The design question a record answers.
 | `dependency-failure` | Behaviour when something the system relies on degrades |
 | `backup-restore` | Backups, restores and recovering deleted or corrupted data. Rebooting a site and failing over are `replication-failover` |
 | `model-pipeline` | How a model is built and run: model architecture, training and feature pipelines, and the inference path. A cost or sizing question about them is still `capacity-cost` |
+| `network-transport` | How traffic is carried between machines: load balancing, encapsulation, protocols, connection and port handling, clock distribution. Choosing where replicas live is `replication-failover` |
