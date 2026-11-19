@@ -127,6 +127,13 @@ if (!page.ok) {
   console.error(`HTTP ${page.status} for ${url}.\n${FALLBACK}`);
   process.exit(4);
 }
+// A retired article often redirects to a home or marketing page that answers 200 with plenty of prose.
+// The article's own name must survive the redirect.
+const slug = target.pathname.split("/").filter(Boolean).pop()?.replace(/\.html?$/, "").toLowerCase();
+if (page.redirected && slug && !new URL(page.url).pathname.toLowerCase().includes(slug)) {
+  console.error(`${url} redirected to ${page.url}, which is not the same article. Nothing written.\nIf the article moved there, fetch that address instead.`);
+  process.exit(4);
+}
 let html;
 try {
   html = await page.text();

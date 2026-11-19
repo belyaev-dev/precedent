@@ -43,21 +43,21 @@
       "type": "string",
       "minLength": 1,
       "maxLength": 160,
-      "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
+      "pattern": "^(?!.*(\\]\\(|://|`|(?<![A-Za-z0-9_>])<[A-Za-z/!]))[^\\n]*$"
     },
     "text": {
       "description": "Plain text in our own words. No markup, links or URLs.",
       "type": "string",
       "minLength": 1,
       "maxLength": 500,
-      "pattern": "^(?![\\s\\S]*(\\]\\(|://|`|<[A-Za-z/!]))[\\s\\S]*$"
+      "pattern": "^(?![\\s\\S]*(\\]\\(|://|`|(?<![A-Za-z0-9_>])<[A-Za-z/!]))[\\s\\S]*$"
     },
     "locator": {
       "description": "Where in the source the statement is made, in a form check-source can verify: 'Section: <heading as written>', or 'Near: <up to eight consecutive words from the passage>' for sources without headings or for a heading that appears twice, or 'Page 7' / 'At 12:30' for papers and talks. A fact drawn from more than one passage names each, at most three, joined by ' | ' (for example 'Section: Background | Near: twelve nodes with a replica factor'); every part of the fact must be supported by one of them. A bare URL is not a locator.",
       "type": "string",
       "minLength": 2,
       "maxLength": 360,
-      "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
+      "pattern": "^(?!.*(\\]\\(|://|`|(?<![A-Za-z0-9_>])<[A-Za-z/!]))[^\\n]*$"
     },
     "fact": {
       "description": "Something the source itself reports, restated in our own words, with where it says so. Reviewer inference never goes here; it goes in curator_notes.",
@@ -551,7 +551,7 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 400,
-          "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
+          "pattern": "^(?!.*(\\]\\(|://|`|(?<![A-Za-z0-9_>])<[A-Za-z/!]))[^\\n]*$"
         },
         "published": {
           "description": "The publication date the page states, as precisely as it states it. When the page shows only a last-updated date, give that date and say so in published_note.",

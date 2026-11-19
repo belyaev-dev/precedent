@@ -4,6 +4,7 @@ One page, for a source a person has chosen to write a card from. Never used to c
 Usage: uvx --from camoufox python -I scripts/fetch-browser.py <url> <out.txt>   (out must be outside the repository)
 """
 import pathlib, re, sys
+from urllib.parse import urlparse
 from camoufox.sync_api import Camoufox
 
 if len(sys.argv) != 3:
@@ -16,6 +17,11 @@ with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
     response = page.goto(url, timeout=60000, wait_until="domcontentloaded")
     if response is not None and response.status >= 400:
         sys.exit(f"HTTP {response.status} for {url}; nothing written")
+    # A retired article often redirects to a home page; the article's own name must survive the redirect.
+    segments = [part for part in urlparse(url).path.split("/") if part]
+    slug = re.sub(r"\.html?$", "", segments[-1]).lower() if segments else ""
+    if slug and slug not in urlparse(page.url).path.lower():
+        sys.exit(f"{url} redirected to {page.url}, which is not the same article; nothing written")
     page.wait_for_timeout(4000)
     # Long posts load their later sections as the reader reaches them: walk to the bottom until the page stops growing.
     height = 0
