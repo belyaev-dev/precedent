@@ -99,13 +99,9 @@ const RECHECK_MS = 60_000;
 const bundled = makeCorpus(samples.version, samples.cards as unknown as Card[]);
 let loaded: { corpus: Corpus; etag: string } | undefined;
 let checkedAt = 0;
+let reading: Promise<Corpus> | undefined;
 
-/** The corpus to serve this request from. Looks at the bucket at most once a minute, and only downloads a changed file. */
-export async function corpus(): Promise<Corpus> {
-  const bucket = env.CORPUS;
-  if (!bucket) return bundled;
-  if (Date.now() - checkedAt < RECHECK_MS) return loaded?.corpus ?? bundled;
-  checkedAt = Date.now();
+async function read(bucket: R2Bucket): Promise<Corpus> {
   try {
     const object = await bucket.get(OBJECT, loaded ? { onlyIf: { etagDoesNotMatch: loaded.etag } } : undefined);
     // An unchanged file comes back without a body.
@@ -118,4 +114,16 @@ export async function corpus(): Promise<Corpus> {
     console.error(JSON.stringify({ event: "error", name: "corpus_source", message: String(error) }));
   }
   return loaded?.corpus ?? bundled;
+}
+
+/** The corpus to serve this request from. Looks at the bucket at most once a minute, and only downloads a changed file. */
+export function corpus(): Promise<Corpus> {
+  const bucket = env.CORPUS;
+  if (!bucket) return Promise.resolve(bundled);
+  if (reading) return reading;
+  if (loaded && Date.now() - checkedAt < RECHECK_MS) return Promise.resolve(loaded.corpus);
+  checkedAt = Date.now();
+  // Requests that arrive during a read share it, so none of them is answered from the samples meanwhile.
+  reading = read(bucket).finally(() => (reading = undefined));
+  return reading;
 }
