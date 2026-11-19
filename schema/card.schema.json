@@ -106,7 +106,8 @@
         "control-plane",
         "auth-session",
         "coordination",
-        "traffic-routing"
+        "traffic-routing",
+        "ml-serving"
       ]
     },
     "topic": {
@@ -546,7 +547,11 @@
           "$ref": "#/$defs/line"
         },
         "author": {
-          "$ref": "#/$defs/line"
+          "description": "As the page gives it. A post with many authors lists them all.",
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 400,
+          "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
         },
         "published": {
           "description": "The publication date the page states, as precisely as it states it. When the page shows only a last-updated date, give that date and say so in published_note.",

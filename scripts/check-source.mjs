@@ -15,7 +15,8 @@ const normalise = (s) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“
 const source = normalise(readFileSync(sourcePath, "utf8"));
 const sourceDigits = source.replace(/(\d),(?=\d{3})/g, "$1");
 // An address, a time or a decimal is one word, so 1.1.1.0/24 at 21:48 does not count as seven.
-const words = (s) => normalise(s).match(/[a-z0-9]+(?:[.:\/,'][a-z0-9]+)*/g) ?? [];
+// A possessive is two words, so a locator may stop at "Discord" where the source has "Discord's".
+const words = (s) => normalise(s).match(/[a-z0-9]+(?:[.:\/,][a-z0-9]+)*/g) ?? [];
 const sourceWords = ` ${words(source).join(" ")} `;
 // A saved page this short is navigation or a sign-in wall, not an article.
 const MIN_SOURCE_WORDS = 150; // one incident's section of a monthly report can be this short
@@ -33,9 +34,12 @@ function numberForms(value) {
     const scaled = Math.round((value / divisor) * 100) / 100;
     if (scaled < 1 || Math.round(scaled * divisor) !== value) continue; // only a value the short form states exactly
     for (const s of suffixes) forms.push(`${scaled}${s}`);
-    // "five million", "twelve thousand"
-    if (WORDS[scaled]) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${WORDS[scaled]}${s}`));
+    // "five million", "twelve thousand", "two hundred billion"
+    const spelled = WORDS[scaled] ?? (scaled % 100 === 0 && WORDS[scaled / 100] ? `${WORDS[scaled / 100]} hundred` : null);
+    if (spelled) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${spelled}${s}`));
   }
+  // "two hundred"
+  if (value % 100 === 0 && WORDS[value / 100]) forms.push(`${WORDS[value / 100]} hundred`);
   return forms;
 }
 // A number word is not a match inside a larger one: "five" in "twenty-five", "a dozen" in "half a dozen".
@@ -47,7 +51,8 @@ const hasNumber = (value, written = String(value)) =>
     /^[a-z]/.test(form)
       ? new RegExp(`${NOT_AFTER_TENS}${form}\\b`).test(source)
       : // A plain number may carry a unit ("80ms", "4.2GB"); a short form may not run on ("5m" is not in "5ms").
-        new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d${/[a-z]$/.test(form) ? "|[a-z]" : ""})`).test(sourceDigits),
+        // A dot after a letter is part of a name (H.264), not a decimal point.
+        new RegExp(`(^|[^\\d.]|(?<!\\d)\\.)${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d${/[a-z]$/.test(form) ? "|[a-z]" : ""})`).test(sourceDigits),
   );
 
 const problems = [];
