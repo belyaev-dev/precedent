@@ -13,7 +13,8 @@ if (!cardPath || !sourcePath) {
 const card = parse(readFileSync(cardPath, "utf8"));
 const normalise = (s) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/\s+/g, " ");
 const source = normalise(readFileSync(sourcePath, "utf8"));
-const sourceDigits = source.replace(/(\d),(?=\d{3})/g, "$1");
+// Thousands grouped by a comma or, as Swiss writers do, an apostrophe: 11,000 and 11'000 are both 11000.
+const sourceDigits = source.replace(/(\d)[,'](?=\d{3})/g, "$1");
 // An address, a time or a decimal is one word, so 1.1.1.0/24 at 21:48 does not count as seven.
 // A possessive is two words, so a locator may stop at "Discord" where the source has "Discord's".
 const words = (s) => normalise(s).match(/[a-z0-9]+(?:[.:\/,][a-z0-9]+)*/g) ?? [];
