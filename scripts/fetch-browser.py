@@ -25,12 +25,21 @@ with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
         if at_bottom and grown == height:
             break
         height = grown
+    # Headings are marked as fetch-source.mjs marks them, so "Section:" locators work on either fetcher's output.
+    # A table of contents repeats every heading; its links are dropped so each heading appears once.
     text = page.evaluate(
-        """() => {
+        r"""() => {
           const words = e => e.innerText.split(/\s+/).length;
           const body = document.body;
           const best = [...document.querySelectorAll('article, main, [role=main]')].sort((a, b) => words(b) - words(a))[0];
-          return (best && words(best) > 0.4 * words(body) ? best : body).innerText;
+          const root = best && words(best) > 0.4 * words(body) ? best : body;
+          const headings = [...root.querySelectorAll('h1, h2, h3, h4, h5, h6')];
+          const titles = new Set(headings.map(h => h.innerText.trim()).filter(Boolean));
+          for (const a of root.querySelectorAll('a[href^="#"]')) {
+            if (titles.has(a.innerText.trim()) && !a.closest('h1, h2, h3, h4, h5, h6')) a.remove();
+          }
+          for (const h of headings) if (h.innerText.trim()) h.prepend(document.createTextNode('## '));
+          return root.innerText;
         }"""
     )
     title = page.title()

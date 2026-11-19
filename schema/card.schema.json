@@ -362,7 +362,7 @@
             "type": "string",
             "minLength": 2,
             "maxLength": 60,
-            "pattern": "^[a-z0-9][a-z0-9 .+/-]*$"
+            "pattern": "^[a-z0-9][a-z0-9 ._+/-]*$"
           }
         },
         "tech": {
@@ -372,7 +372,7 @@
           "uniqueItems": true,
           "items": {
             "type": "string",
-            "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+            "pattern": "^[a-z0-9][a-z0-9._+-]*$",
             "maxLength": 40
           }
         }
@@ -689,7 +689,7 @@
               "tech": {
                 "description": "The technology it is built on, as a filter tag, when the source names one.",
                 "type": "string",
-                "pattern": "^[a-z0-9][a-z0-9.+-]*$",
+                "pattern": "^[a-z0-9][a-z0-9._+-]*$",
                 "maxLength": 40
               },
               "locator": {

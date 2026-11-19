@@ -32,8 +32,10 @@ function run(change) {
   change(card);
   const cardPath = join(dir, "card.yaml");
   const sourcePath = join(dir, "source.txt");
+  const source = card.__source ?? SOURCE;
+  delete card.__source;
   writeFileSync(cardPath, stringify(card));
-  writeFileSync(sourcePath, card.__source ?? SOURCE);
+  writeFileSync(sourcePath, source);
   const result = spawnSync(process.execPath, [join(root, "scripts/check-source.mjs"), cardPath, sourcePath], { encoding: "utf8" });
   if (process.env.DEBUG_CHECK) console.error(result.stdout + result.stderr);
   return { ok: result.status === 0, output: result.stdout + result.stderr };
@@ -67,4 +69,13 @@ test("a run of the source's own words is a copied passage", () => {
 test("a saved page with no article in it is rejected", () => {
   const shell = run((c) => (c.__source = Array.from({ length: 500 }, (_, i) => `Menu item ${i}`).join("\n")));
   assert.match(shell.output, /page shell or a sign-in wall/);
+});
+
+test("a locator matches through quotation marks, code ticks and punctuation in the source", () => {
+  const source = SOURCE.replace("We moved the write path", "We ran the “validation” version on `m3-ultramem-128`: 128 vCPUs. We moved the write path");
+  const fine = run((c) => {
+    c.__source = source;
+    c.records[0].chosen.locator = "Near: validation version on m3-ultramem-128: 128 vCPUs | Section: What we changed";
+  });
+  assert.equal(fine.ok, true, fine.output);
 });

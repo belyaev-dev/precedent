@@ -101,7 +101,16 @@ function toText(html) {
 const FALLBACK = `If this source is still wanted, fetch that one page in a browser:\n  uvx --from camoufox python -I scripts/fetch-browser.py ${url} ${out}`;
 const target = new URL(url);
 const headers = { "user-agent": USER_AGENT };
-const robots = await fetch(new URL("/robots.txt", target), { headers });
+// A timeout or a dropped connection is a failed fetch like an HTTP error, not a crash.
+async function get(address) {
+  try {
+    return await fetch(address, { headers, signal: AbortSignal.timeout(45_000) });
+  } catch (err) {
+    console.error(`could not reach ${address}: ${err.cause?.code ?? err.name}.\n${FALLBACK}`);
+    process.exit(4);
+  }
+}
+const robots = await get(new URL("/robots.txt", target));
 if (robots.ok) {
   const agent = blockedBy(await robots.text(), target.pathname + target.search);
   if (agent) {
@@ -113,12 +122,19 @@ if (robots.ok) {
   process.exit(3);
 }
 
-const page = await fetch(target, { headers });
+const page = await get(target);
 if (!page.ok) {
   console.error(`HTTP ${page.status} for ${url}.\n${FALLBACK}`);
   process.exit(4);
 }
-const text = toText(await page.text());
+let html;
+try {
+  html = await page.text();
+} catch (err) {
+  console.error(`the connection to ${target.host} dropped while reading the page: ${err.cause?.code ?? err.name}.\n${FALLBACK}`);
+  process.exit(4);
+}
+const text = toText(html);
 // A page that builds its article in JavaScript answers 200 with only navigation and a footer:
 // few words, or plenty of words and almost no sentences.
 const wordCount = text.split(/\s+/).filter(Boolean).length;

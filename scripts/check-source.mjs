@@ -53,9 +53,10 @@ function checkLocator(locator, where) {
       if (parts.length > 1 && !/^(Page|At) /.test(part.trim())) problems.push(`${where}: locator part is not Section:, Near:, Page or At: ${part.trim()}`);
       continue;
     }
-    const needle = normalise(match[2]).replace(/^"|"$/g, "");
-    if (!source.includes(needle)) problems.push(`${where}: locator text not found in source: ${part.trim()}`);
-    if (match[1] === "Near" && needle.split(" ").length > 8) problems.push(`${where}: a Near locator may quote at most eight words`);
+    // Matched word by word, so quotation marks, code ticks and punctuation in the source do not get in the way.
+    const needle = words(match[2]);
+    if (!needle.length || !sourceWords.includes(` ${needle.join(" ")} `)) problems.push(`${where}: locator text not found in source: ${part.trim()}`);
+    if (match[1] === "Near" && match[2].trim().split(/\s+/).length > 8) problems.push(`${where}: a Near locator may quote at most eight words`);
   }
 }
 function checkText(text, where) {
