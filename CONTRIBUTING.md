@@ -60,7 +60,7 @@ Read the whole saved file before writing anything. Every fact in a card comes fr
 - A bound that could sit in more than one tier supports none: one table's size, one migration's volume below the top tier, a company-wide headcount above five.
 - A bound that lies wholly inside an end tier pins it, as `estimated` with a `note`: a lower bound above the top tier's floor (1.5 PB moved in one migration is data tier 5; "hundreds of billions of events a day" is traffic tier 5), or an upper bound within tier 0 (a company with four backend engineers is team tier 0).
 - Traffic is load on the operator's own system in normal service. Requests a third-party CDN absorbed, and a one-off abuse spike, are context: record them as metrics tagged `other`, with the boundary in the `qualifier`.
-- Data counts each stored item once. When the source gives only on-disk volume across replicas, set a tier only if the replicated and the unreplicated reading land in the same tier.
+- Data counts each stored item once, at the size it is stored: for a system that compresses what it keeps, the compressed size. When the source gives only on-disk volume across replicas, set a tier only if the replicated and the unreplicated reading land in the same tier.
 - A total across a fleet (twelve clusters, every instance) is the system's figure only when the card's system is that fleet; say "total across ..." in the `qualifier`.
 - The tier is for the card's own system. A monitoring service's card does not take the traffic of the system it watches; that figure is context, tagged `other`.
 - A metric tagged with an axis supports that axis's tier. A number about traffic, data or people that supports no tier is tagged `other`.
