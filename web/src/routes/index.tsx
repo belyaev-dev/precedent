@@ -12,9 +12,9 @@ export const Route = createFileRoute("/")({
 
 // Figures from bench/RESULTS.md, run 3.
 const FIGURES = [
-  ["4.3", "instead of 6.4", "components in a small-system design"],
-  ["6.7", "instead of 11.7", "components in a large-system design"],
-  ["42", "of 60", "design pairs where the judge preferred the one written with Precedent"],
+  ["3.9", "instead of 5.4", "components in a small-system design"],
+  ["6.6", "instead of 10.0", "components in a large-system design"],
+  ["45", "of 56", "design pairs where the judge preferred the one written with Precedent"],
 ];
 
 const SMALL_SYSTEMS = [

@@ -1,11 +1,13 @@
 #!/usr/bin/env node
 // Runs the benchmark: each design task, at each size, answered with and without the skill, then judged.
-// Usage: node bench/run.mjs [--tasks id,id] [--sizes small,large] [--runs N] [--model M] [--judge M] [--parallel N] [--runner claude|bb] [--words N]
+// Usage: PRECEDENT_KEY=prc_... node bench/run.mjs [--tasks id,id] [--sizes small,large] [--runs N] [--model M] [--judge M] [--parallel N] [--runner claude|bb] [--words N] [--cards dir]
+// The with-skill arm searches the corpus through the MCP endpoint, so it needs a key and spends its calls.
+// --cards names a directory holding every card, used to check cited ids; without it only the sample cards are known.
 // --runner claude (default) needs a logged-in `claude` CLI. --runner bb runs each call as a throwaway bb thread,
 // for machines where Claude is reached through bb. Results go to bench/results/<timestamp>/ (not committed).
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -26,6 +28,16 @@ const judgeModel = flag("judge", "opus");
 const parallel = Number(flag("parallel", "4"));
 const runner = flag("runner", "claude");
 const words = Number(flag("words", "800"));
+const endpoint = flag("endpoint", "https://precedents.dev/api/mcp");
+const siblingCards = resolve(root, "../precedent-cards/cards");
+const cardsDir = flag("cards", existsSync(siblingCards) ? siblingCards : join(skillDir, "corpus/cards"));
+const key = process.env.PRECEDENT_KEY;
+if (!key) {
+  console.error("Set PRECEDENT_KEY to a key from https://precedents.dev/account.");
+  process.exit(1);
+}
+const mcpConfig = JSON.stringify({ mcpServers: { precedent: { type: "http", url: endpoint, headers: { Authorization: `Bearer ${key}` } } } });
+const MCP_TOOLS = ["facets", "search", "get"].map((t) => `mcp__precedent__precedent_${t}`).join(",");
 const outDir = join(root, "bench/results", new Date().toISOString().replace(/[:.]/g, "-"));
 mkdirSync(outDir, { recursive: true });
 
@@ -33,7 +45,7 @@ const ENDING = `Do not ask questions; where a number is missing, state your assu
 End with one final line that starts with "COMPONENTS:" and lists every infrastructure component in your design, separated by semicolons: each deployable service, datastore, queue, cache, and external service. List nothing you rejected.`;
 const ARMS = {
   base: (brief) => `Answer from your own knowledge. Do not use tools, files, skills or the web.\n\n${brief}\n\n${ENDING}`,
-  skill: (brief) => `Read the skill at ${skillDir}/SKILL.md and follow it for this request. Its corpus is in the corpus/ directory beside it. Read files only inside that skill directory; do not use the web or any other skill.\n\n${brief}\n\n${ENDING}`,
+  skill: (brief) => `Read the skill at ${skillDir}/SKILL.md and follow it for this request. The corpus is already connected: search it with the precedent_facets, precedent_search and precedent_get tools. Read files only inside that skill directory; do not use the web or any other skill.\n\n${brief}\n\n${ENDING}`,
 };
 
 const run = promisify(execFile);
@@ -41,9 +53,10 @@ const BB_MODELS = { sonnet: "claude-sonnet-5-5", opus: "claude-opus-5-5", haiku:
 
 // One call as a throwaway bb thread in an empty directory. Tools cannot be switched off here, so the
 // prompts carry the restriction. Cost is not reported.
-async function viaBb(prompt, { useModel }) {
+async function viaBb(prompt, { useModel, mcp }) {
   const dir = mkdtempSync(join(tmpdir(), "precedent-bench-"));
   writeFileSync(join(dir, "prompt.txt"), prompt);
+  if (mcp) writeFileSync(join(dir, ".mcp.json"), mcpConfig, { mode: 0o600 });
   let id;
   try {
     const spawned = await run("bb", ["thread", "spawn", "--project", process.env.BB_PROJECT_ID, "--environment", dir, "--provider", "claude-code", "--model", BB_MODELS[useModel] ?? useModel, "--permission-mode", "full", "--parent-notifications", "off", ...(process.env.BB_THREAD_ID ? ["--parent-self"] : []), "--title", "precedent bench", "--prompt-file", join(dir, "prompt.txt"), "--json"]);
@@ -55,15 +68,17 @@ async function viaBb(prompt, { useModel }) {
     return { text: "", cost: 0, error: String(err.stderr || err.message).slice(0, 400) };
   } finally {
     if (id) await run("bb", ["thread", "archive", id]).catch(() => {});
+    rmSync(dir, { recursive: true, force: true });
   }
 }
 
-// Runs in an empty directory with skills and MCP servers off, so both arms see the same bare assistant.
+// Runs in an empty directory with skills off and no MCP server but ours, so both arms see the same bare assistant.
 function claude(prompt, options) {
   if (runner === "bb") return viaBb(prompt, options);
-  const { useModel, tools, addDir } = options;
+  const { useModel, tools, addDir, mcp } = options;
   const args = ["-p", "--model", useModel, "--output-format", "json", "--no-session-persistence", "--disable-slash-commands", "--strict-mcp-config", "--tools", tools];
-  if (tools) args.push("--allowedTools", tools);
+  if (mcp) args.push("--mcp-config", mcpConfig);
+  if (tools || mcp) args.push("--allowedTools", [tools, mcp && MCP_TOOLS].filter(Boolean).join(","));
   if (addDir) args.push("--add-dir", addDir);
   return new Promise((done) => {
     const child = spawn("claude", args, { cwd: mkdtempSync(join(tmpdir(), "precedent-bench-")), stdio: ["pipe", "pipe", "pipe"] });
@@ -109,13 +124,13 @@ for (const task of config.tasks.filter((t) => taskIds.includes(t.id))) {
 const jobs = briefs.flatMap((b) => Object.keys(ARMS).flatMap((arm) => Array.from({ length: runs }, (_, run) => ({ ...b, arm, run }))));
 console.log(`${briefs.length} briefs x ${Object.keys(ARMS).length} arms x ${runs} run(s) = ${jobs.length} answers, model ${model}, runner ${runner}`);
 const knownRecords = new Set();
-for (const file of readdirSync(join(skillDir, "corpus/cards"))) {
-  const card = parse(readFileSync(join(skillDir, "corpus/cards", file), "utf8"));
+for (const file of readdirSync(cardsDir).filter((f) => f.endsWith(".yaml"))) {
+  const card = parse(readFileSync(join(cardsDir, file), "utf8"));
   for (const record of card.records ?? []) knownRecords.add(`${card.id}#${record.id}`);
 }
 const answers = await pool(jobs, async (job) => {
   const isSkill = job.arm === "skill";
-  const res = await claude(ARMS[job.arm](job.brief), { useModel: model, tools: isSkill ? "Read,Glob,Grep" : "", addDir: isSkill ? skillDir : null });
+  const res = await claude(ARMS[job.arm](job.brief), { useModel: model, tools: isSkill ? "Read,Glob,Grep" : "", addDir: isSkill ? skillDir : null, mcp: isSkill });
   const componentsLine = res.text.split("\n").reverse().find((l) => /^\**COMPONENTS:/i.test(l.trim())) ?? "";
   const components = componentsLine.replace(/^\**COMPONENTS:\**/i, "").split(";").map((s) => s.trim()).filter(Boolean);
   const cited = [...new Set(res.text.match(/[a-z0-9]+(?:-[a-z0-9]+)*#[df][0-9]{1,2}/g) ?? [])];
