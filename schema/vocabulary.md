@@ -49,3 +49,4 @@ The design question a record answers.
 | `observability` | Detecting and diagnosing problems |
 | `dependency-failure` | Behaviour when something the system relies on degrades |
 | `backup-restore` | Backups, restores and recovering deleted or corrupted data. Rebooting a site and failing over are `replication-failover` |
+| `model-pipeline` | How a model is built and run: model architecture, training and feature pipelines, and the inference path. A cost or sizing question about them is still `capacity-cost` |

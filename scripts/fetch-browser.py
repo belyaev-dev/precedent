@@ -3,7 +3,7 @@ a robots.txt refusal, an HTTP block, or a page that only renders its article wit
 One page, for a source a person has chosen to write a card from. Never used to crawl a site.
 Usage: uvx --from camoufox python -I scripts/fetch-browser.py <url> <out.txt>   (out must be outside the repository)
 """
-import pathlib, re, sys
+import pathlib, re, sys, time
 from urllib.parse import urlparse
 from camoufox.sync_api import Camoufox
 
@@ -15,6 +15,12 @@ if pathlib.Path(__file__).resolve().parents[1] in out.parents:
 with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
     page = browser.new_page()
     response = page.goto(url, timeout=60000, wait_until="domcontentloaded")
+    # Some hosts answer 429 to a second page fetched straight after the first; wait and ask again.
+    for wait in (20, 60):
+        if response is None or response.status != 429:
+            break
+        time.sleep(wait)
+        response = page.goto(url, timeout=60000, wait_until="domcontentloaded")
     if response is not None and response.status >= 400:
         sys.exit(f"HTTP {response.status} for {url}; nothing written")
     # A retired article often redirects to a home page; the article's own name must survive the redirect.

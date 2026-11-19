@@ -128,7 +128,8 @@
         "capacity-cost",
         "observability",
         "dependency-failure",
-        "backup-restore"
+        "backup-restore",
+        "model-pipeline"
       ]
     },
     "scaleAxis": {
