@@ -3,7 +3,7 @@ a robots.txt refusal, an HTTP block, or a page that only renders its article wit
 One page, for a source a person has chosen to write a card from. Never used to crawl a site.
 Usage: uvx --from camoufox python -I scripts/fetch-browser.py <url> <out.txt>   (out must be outside the repository)
 """
-import sys, pathlib
+import pathlib, re, sys
 from camoufox.sync_api import Camoufox
 
 if len(sys.argv) != 3:
@@ -13,7 +13,9 @@ if pathlib.Path(__file__).resolve().parents[1] in out.parents:
     sys.exit("refusing to write source text inside the repository")
 with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
     page = browser.new_page()
-    page.goto(url, timeout=60000, wait_until="domcontentloaded")
+    response = page.goto(url, timeout=60000, wait_until="domcontentloaded")
+    if response is not None and response.status >= 400:
+        sys.exit(f"HTTP {response.status} for {url}; nothing written")
     page.wait_for_timeout(4000)
     # Long posts load their later sections as the reader reaches them: walk to the bottom until the page stops growing.
     height = 0
@@ -43,8 +45,10 @@ with Camoufox(headless=True, i_know_what_im_doing=True) as browser:
         }"""
     )
     title = page.title()
-if len(text.split()) < 300:
-    sys.exit(f"only {len(text.split())} words extracted; page probably did not load")
+word_count = len(text.split())
+sentences = len(re.findall(r"[a-z,;)]{2}[.!?]\s", text))
+if word_count < 300 or sentences * 150 < word_count:
+    sys.exit(f"{word_count} words in {sentences} sentences extracted: a page shell or an error page, not the article; nothing written")
 out.parent.mkdir(parents=True, exist_ok=True)
 out.write_text(f"{title}\n{url}\n\n{text}\n")
 print(f"{len(text.split())} words -> {out}")

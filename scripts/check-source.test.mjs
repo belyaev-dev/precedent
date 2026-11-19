@@ -10,7 +10,7 @@ import { parse, stringify } from "yaml";
 
 const root = resolve(fileURLToPath(import.meta.url), "../..");
 const dir = mkdtempSync(join(tmpdir(), "check-source-"));
-const filler = Array.from({ length: 40 }, (_, i) => `Paragraph ${i} says something plain about the service and then stops. It adds a second sentence so the page reads as prose.`).join("\n\n");
+const filler = Array.from({ length: 40 }, () => `This paragraph says something plain about the service and then stops. It adds a second sentence so the page reads as prose.`).join("\n\n");
 const SOURCE = `## Background
 
 The resolver answers on 1.1.1.1 and 1.0.0.1, and the prefix 1.1.1.0/24 was withdrawn at 21:48. The fleet serves over five million queries per second across twelve clusters, on version 3.6.2 of the store.
@@ -82,4 +82,15 @@ test("a locator matches through quotation marks, code ticks and punctuation in t
     c.records[0].chosen.locator = "Near: validation version on m3-ultramem-128: 128 vCPUs | Section: What we changed";
   });
   assert.equal(fine.ok, true, fine.output);
+});
+
+test("a near miss is not a match: longer addresses, compound number words, inexact short forms", () => {
+  const source = SOURCE.replace("across twelve clusters, on version 3.6.2", "across many clusters, on version 3.6.20 at 10.0.0.10, with twenty-five million rows and half a dozen replicas");
+  const fails = (change, pattern) => assert.match(run((c) => ((c.__source = source), change(c))).output, pattern);
+  fails((c) => (c.architecture.text = "Runs version 3.6.2."), /3\.6\.2 not found/);
+  fails((c) => (c.architecture.text = "Listens on 10.0.0.1."), /10\.0\.0\.1 not found/);
+  fails((c) => (c.architecture.text = "Announces 1.1.1.0/2."), /1\.1\.1\.0\/2 not found/);
+  fails((c) => (c.architecture.text = "Runs 12 replicas."), /number 12 not found/);
+  fails((c) => (c.scale.metrics = [{ axis: "other", name: "queries", value: 5004000, unit: "per second", locator: "Section: Background" }]), /value 5004000 not found/);
+  fails((c) => (c.architecture.locator = "Secton: Background"), /locator part is not Section:/);
 });

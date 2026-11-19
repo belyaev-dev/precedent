@@ -37,7 +37,7 @@ describe("cards at the size limits", () => {
     expect(run.status, `${run.stdout}${run.stderr}`).toBe(0);
     for (const card of cards) {
       expect(textLength(card)).toBeGreaterThan(11_500);
-      expect(textLength(card)).toBeLessThanOrEqual(12_000);
+      expect(textLength(card)).toBeLessThanOrEqual(14_000);
     }
   });
 

@@ -18,7 +18,7 @@ const sourceDigits = source.replace(/(\d),(?=\d{3})/g, "$1");
 const words = (s) => normalise(s).match(/[a-z0-9]+(?:[.:\/,'][a-z0-9]+)*/g) ?? [];
 const sourceWords = ` ${words(source).join(" ")} `;
 // A saved page this short is navigation or a sign-in wall, not an article.
-const MIN_SOURCE_WORDS = 300;
+const MIN_SOURCE_WORDS = 150; // one incident's section of a monthly report can be this short
 // The rule is "no quotation beyond a few words". This is the backstop, set where a match is certainly a lifted passage and not a shared technical phrase.
 const COPIED_RUN = 12;
 // IP addresses, CIDR ranges and version numbers are names, not quantities: 1.1.1.1 is not the number 1.1 twice.
@@ -31,16 +31,24 @@ function numberForms(value) {
   for (const [divisor, suffixes] of [[1e3, ["k", " thousand"]], [1e6, ["m", " million", "mm"]], [1e9, ["b", "bn", " billion"]], [1e12, ["t", " trillion"]]]) {
     // 2200000000 / 1e9 is 2.2000000000000002 in floating point; round to the two decimals a source would print.
     const scaled = Math.round((value / divisor) * 100) / 100;
-    if (scaled >= 1 && Math.abs(scaled * divisor - value) < 1e-6 * value) for (const s of suffixes) forms.push(`${scaled}${s}`);
+    if (scaled < 1 || Math.round(scaled * divisor) !== value) continue; // only a value the short form states exactly
+    for (const s of suffixes) forms.push(`${scaled}${s}`);
     // "five million", "twelve thousand"
     if (WORDS[scaled]) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${WORDS[scaled]}${s}`));
   }
   return forms;
 }
+// A number word is not a match inside a larger one: "five" in "twenty-five", "a dozen" in "half a dozen".
+const NOT_AFTER_TENS = "(?<!(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[ -])(?<![a-z-])";
 const hasNumber = (value, written = String(value)) =>
-  (WORDS[value] && new RegExp(`\\b${WORDS[value]}\\b`).test(source)) ||
-  (value === 12 && /\ba dozen\b/.test(source)) ||
-  [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d)`).test(sourceDigits));
+  (WORDS[value] && new RegExp(`${NOT_AFTER_TENS}${WORDS[value]}\\b`).test(source)) ||
+  (value === 12 && /(?<!half )\ba dozen\b/.test(source)) ||
+  [written, ...numberForms(value)].some((form) =>
+    /^[a-z]/.test(form)
+      ? new RegExp(`${NOT_AFTER_TENS}${form}\\b`).test(source)
+      : // A plain number may carry a unit ("80ms", "4.2GB"); a short form may not run on ("5m" is not in "5ms").
+        new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d${/[a-z]$/.test(form) ? "|[a-z]" : ""})`).test(sourceDigits),
+  );
 
 const problems = [];
 // A fact drawn from several passages names each one, joined by " | ".
@@ -52,7 +60,7 @@ function checkLocator(locator, where) {
     const match = /^(Section|Near):\s*(.+)$/.exec(part.trim());
     if (!match) {
       // Page numbers and timestamps cannot be checked against text; anything else is a typo.
-      if (parts.length > 1 && !/^(Page|At) /.test(part.trim())) problems.push(`${where}: locator part is not Section:, Near:, Page or At: ${part.trim()}`);
+      if (!/^(Page|At) /.test(part.trim())) problems.push(`${where}: locator part is not Section:, Near:, Page or At: ${part.trim()}`);
       continue;
     }
     // Matched word by word, so quotation marks, code ticks and punctuation in the source do not get in the way.
@@ -63,7 +71,9 @@ function checkLocator(locator, where) {
 }
 function checkText(text, where) {
   for (const dotted of text.match(DOTTED) ?? []) {
-    if (!source.includes(dotted)) problems.push(`${where}: ${dotted} not found in source`);
+    // Whole, not as part of a longer one: 10.0.0.1 is not in 10.0.0.10, nor 1.1.1.0/2 in 1.1.1.0/24.
+    const whole = new RegExp(`(?<![\\d.])${dotted.replace(/[.\/]/g, "\\$&")}(?!\\d|\\.\\d)`);
+    if (!whole.test(source)) problems.push(`${where}: ${dotted} not found in source`);
   }
   for (const token of text.replace(DOTTED, " ").replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(\.\d+)?/g) ?? []) {
     if (!hasNumber(Number(token), token)) problems.push(`${where}: number ${token} not found in source`);

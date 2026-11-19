@@ -98,7 +98,7 @@ function toText(html) {
     .trim();
 }
 
-const FALLBACK = `If this source is still wanted, fetch that one page in a browser:\n  uvx --from camoufox python -I scripts/fetch-browser.py ${url} ${out}`;
+const FALLBACK = `If this source is still wanted, fetch that one page in a browser:\n  uvx --from camoufox python -I scripts/fetch-browser.py '${url.replace(/'/g, "%27")}' '${out}'`;
 const target = new URL(url);
 const headers = { "user-agent": USER_AGENT };
 // A timeout or a dropped connection is a failed fetch like an HTTP error, not a crash.

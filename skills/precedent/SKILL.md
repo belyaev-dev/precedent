@@ -75,7 +75,7 @@ With only the bundled samples, read `corpus/INDEX.md` and open the card files it
 
 Look for three things:
 
-- **A baseline:** a system of the same workload at or near the envelope's tiers. Its architecture, and its components where the record lists them, are the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also search with `footprint: ["single-node", "single-database"]` and treat those systems as candidates, and say that the match is by footprint, not by measured scale.
+- **A baseline:** a system of the same workload at or near the envelope's tiers. Its architecture, and its components where the record lists them, are the shape to start from. Small systems seldom publish numbers, so for a tier 0 to 2 envelope also search with `footprint: ["single-node", "single-database", "single-site"]` and treat those systems as candidates, and say that the match is by footprint, not by measured scale.
 - **Decisions:** records for each real choice the task involves.
 - **Failures:** records for the components you are leaning towards.
 
