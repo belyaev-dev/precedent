@@ -40,6 +40,8 @@ Read the whole saved file before writing anything. Every fact in a card comes fr
 - **`cost_paid` is a price the team reports paying for this choice.** Steps of the implementation, skills learned beforehand, and advice to readers are not costs.
 - **Outcomes are things that happened.** A plan, a hope, or the authors' verdict on their own work is not an outcome. Attribute a self-assessment as the authors' own, or leave it out. An outcome belongs to the decision it followed from; a result of the whole system goes on the record for the whole system.
 - **A failure's `fix` separates done from intended.** Completed changes first, then work under way after "In progress:", then intentions after "Planned:".
+- **A planned fix does not say what failed.** `why_defences_failed` and `mechanism` come from the source's account of what happened. "We will add autoscaling" in a list of follow-ups is not a statement that missing autoscaling caused the outage; if the narrative does not say so, the card does not either.
+- **Plans are not things done.** A post that is the first of a series, or written mid-migration, says "we will", "we planned to" and "we wanted to" a great deal. Those go in the card as plans, in the tense the source uses, and never as `outcome`.
 - **A failure record is an incident that happened.** A class of recurring incidents with no dates is still a failure record, worded as recurring. A risk is not.
 - **A later update is not hidden.** When the page carries a note that the system was since replaced, sold or shut down, put it in `later_update` and write the card in the past tense. When the page shows only a last-updated date, give it as `published` and say so in `source.published_note`. When it prints no date at all, give the year of the earliest dated thing on the page (a reader's comment, a dated chart) and say in the note that the date is inferred and from what.
 - **`curator_notes` hold the reviewer's reading only.** A fact from the source goes in a fact field with a locator, never in a note.
@@ -49,7 +51,7 @@ Read the whole saved file before writing anything. Every fact in a card comes fr
 - **`org` as the source names it.** If the source never names the organisation, say so; do not infer it from the author's biography.
 - **Locators that can be checked:** `Section: <heading exactly as written>`, or `Near: <up to eight consecutive words from the passage>`. If a heading appears twice, use `Near:`.
 - **A locator covers the whole fact.** When a fact draws on more than one passage, name each, up to three, joined by ` | `: `Section: Background | Near: twelve nodes with a replica factor`. Do not cut a true detail to fit one locator, and do not leave part of a fact resting on a passage the locator does not name. A fact that needs more than three passages is two facts.
-- **One post, several incidents.** A monthly availability report or a multi-incident review becomes one card per incident that the post describes in enough detail, sharing the source URL, each with `Near:` locators into its own section.
+- **One post, several incidents.** A monthly availability report or a multi-incident review becomes one card per incident that the post describes in enough detail, sharing the source URL. Save one source file per card holding only that incident's section, with the report's title and date above it, so that its repeated sub-headings ("Impact", "What went wrong") work as `Section:` locators and no fact can come from another incident.
 
 ### Scale
 
@@ -88,6 +90,8 @@ The scripts cannot tell whether a fact is filed in the right field or says more 
 - a number attached to the wrong thing (a whole-incident duration given as the length of one phase);
 - an outcome that is the authors' verdict, or that belongs to a different record;
 - a locator that supports only part of its fact;
+- a cause taken from the list of planned fixes, or a plan written as something done;
+- a result of the whole system or project filed as the outcome of one decision;
 - a vocabulary term chosen for the company, not for what the record is about.
 
 ## Feeding in batches
