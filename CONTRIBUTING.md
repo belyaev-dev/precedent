@@ -15,7 +15,7 @@ A card makes claims about a named organisation's system, in public. The rules be
 node scripts/fetch-source.mjs <url> /tmp/precedent-sources/<card-id>.txt
 ```
 
-That is the first attempt. The script identifies itself honestly and stops, writing nothing, in three cases: `robots.txt` disallows the path (exit 3), the site answers with an HTTP error (exit 4), or the page comes back as navigation with no article in it (exit 5). Each time it prints the fallback, which fetches that one page in a real browser:
+That is the first attempt. The script identifies itself honestly and stops, writing nothing, in three cases: `robots.txt` disallows the path (exit 3), the site answers with an HTTP error or redirects to a page that is not the article (exit 4), or the page comes back as navigation with no article in it (exit 5). Each time it prints the fallback, which fetches that one page in a real browser:
 
 ```bash
 uvx --from camoufox python -I scripts/fetch-browser.py <url> /tmp/precedent-sources/<card-id>.txt
