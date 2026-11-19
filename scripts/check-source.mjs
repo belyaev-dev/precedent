@@ -29,8 +29,9 @@ const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "e
 function numberForms(value) {
   const forms = [String(value)];
   for (const [divisor, suffixes] of [[1e3, ["k", " thousand"]], [1e6, ["m", " million", "mm"]], [1e9, ["b", "bn", " billion"]], [1e12, ["t", " trillion"]]]) {
-    const scaled = value / divisor;
-    if (scaled >= 1 && Number.isInteger(scaled * 100)) for (const s of suffixes) forms.push(`${scaled}${s}`);
+    // 2200000000 / 1e9 is 2.2000000000000002 in floating point; round to the two decimals a source would print.
+    const scaled = Math.round((value / divisor) * 100) / 100;
+    if (scaled >= 1 && Math.abs(scaled * divisor - value) < 1e-6 * value) for (const s of suffixes) forms.push(`${scaled}${s}`);
     // "five million", "twelve thousand"
     if (WORDS[scaled]) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${WORDS[scaled]}${s}`));
   }
@@ -38,6 +39,7 @@ function numberForms(value) {
 }
 const hasNumber = (value, written = String(value)) =>
   (WORDS[value] && new RegExp(`\\b${WORDS[value]}\\b`).test(source)) ||
+  (value === 12 && /\ba dozen\b/.test(source)) ||
   [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d)`).test(sourceDigits));
 
 const problems = [];

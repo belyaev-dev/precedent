@@ -52,6 +52,10 @@ test("a number the source writes out in words is found", () => {
   assert.equal(run((c) => (c.scale.metrics = [{ axis: "other", name: "queries", value: 5000000, unit: "per second", locator: "Section: Background" }])).ok, true);
   assert.equal(run((c) => (c.architecture.text = "Serves 5 million queries per second across 12 clusters.")).ok, true);
   assert.match(run((c) => (c.architecture.text = "Serves 77 million queries per second.")).output, /number 77 not found/);
+  // 2.2 billion is not exactly representable; "a dozen" is twelve.
+  const more = SOURCE.replace("on version 3.6.2", "with over 2.2 billion trips a quarter and a dozen databases, on version 3.6.2");
+  assert.equal(run((c) => ((c.__source = more), (c.scale.metrics = [{ axis: "other", name: "trips", value: 2200000000, unit: "per quarter", locator: "Section: Background" }]))).ok, true);
+  assert.equal(run((c) => ((c.__source = more), (c.architecture.text = "Runs 12 databases."))).ok, true);
 });
 
 test("a locator may name up to three passages, and each must exist", () => {
