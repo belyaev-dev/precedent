@@ -90,6 +90,7 @@ function hitLines(index: CorpusIndex, hit: Hit, n: number): string[] {
 
   if (card.status === "disputed") lines.push(`   DISPUTED (reviewer's note): ${flat(card.status_note ?? "")}`);
   else if (card.status_note) lines.push(`   status note (reviewer's): ${flat(card.status_note)}`);
+  if (card.later_update) lines.push(`   ${factLine("SINCE CHANGED, by the source's own later note", card.later_update)}`);
   if (!record) {
     lines.push(`   ${factLine("architecture", card.architecture)}`);
   } else if (record.kind === "decision") {
@@ -169,11 +170,13 @@ function cardLines(card: Card, full: boolean): string[] {
     `CARD ${card.id}`,
     `title: ${flat(card.title)}`,
     `system: ${flat(card.org)} | ${flat(card.system)} | as of ${card.as_of ?? NOT_STATED} | evidence: ${card.evidence} | workloads: ${card.workloads.join(", ")}`,
-    `source: ${flat(source.title)} | ${flat(source.publisher)}${source.author ? ` | by ${flat(source.author)}` : ""} | published ${source.published} | ${source.party}-party | ${flat(source.url)}`,
+    `source: ${flat(source.title)} | ${flat(source.publisher)}${source.author ? ` | by ${flat(source.author)}` : ""} | published ${source.published}${source.published_note ? ` (${flat(source.published_note)})` : ""} | ${source.party}-party | ${flat(source.url)}`,
     `review: ${reviewStatus(card)}; extracted by ${flat(card.review.extracted_by)}`,
   ];
   if (card.status === "disputed") lines.push(`status: DISPUTED (reviewer's note): ${flat(card.status_note ?? "")}`);
   else if (card.status_note) lines.push(`status note (reviewer's): ${flat(card.status_note)}`);
+  // A setup the source later says was replaced must never read as current, so this goes with every record.
+  if (card.later_update) lines.push(factLine("SINCE CHANGED, by the source's own later note", card.later_update));
   lines.push(scaleLine(card));
   // How a tier was arrived at is the reviewer's reasoning, and a record's scale cannot be judged without it.
   for (const axis of AXES) {

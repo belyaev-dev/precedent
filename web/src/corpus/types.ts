@@ -46,7 +46,7 @@ export interface Failure extends RecordBase {
 }
 
 export type CardRecord = Decision | Failure;
-export type Shape = "single-node" | "single-database" | "partitioned" | "multi-region";
+export type Shape = "single-node" | "single-database" | "single-site" | "partitioned" | "multi-region";
 
 export interface Card {
   id: string;
@@ -63,10 +63,11 @@ export interface Card {
     traffic: { tier: number } | null;
     metrics: { name: string; value: number | string; unit: string; qualifier?: string; locator: string }[];
   };
-  source: { url: string; title: string; publisher: string; published: string };
+  source: { url: string; title: string; publisher: string; published: string; published_note?: string };
   review: { extracted_by: string; reviewed_by: string; reviewed_at: string };
   status: "current" | "disputed";
   status_note?: string;
+  later_update?: Fact;
   records: CardRecord[];
 }
 

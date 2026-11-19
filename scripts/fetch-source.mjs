@@ -1,5 +1,8 @@
 #!/usr/bin/env node
-// Fetches a source page as plain text for card writing, unless robots.txt says not to.
+// Fetches a source page as plain text for card writing. This is the first attempt: it identifies itself and
+// stops at a robots.txt refusal, an HTTP error or a page with no article in it. Each of those exits non-zero
+// and names the browser fallback, scripts/fetch-browser.py, which is run by hand for that one page.
+// Exit codes: 3 robots.txt, 4 HTTP error, 5 no article text.
 // Usage: node scripts/fetch-source.mjs <url> <out.txt>   (out must be outside the repository)
 import { mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { dirname, resolve, sep } from "node:path";
@@ -95,26 +98,35 @@ function toText(html) {
     .trim();
 }
 
+const FALLBACK = `If this source is still wanted, fetch that one page in a browser:\n  uvx --from camoufox python -I scripts/fetch-browser.py ${url} ${out}`;
 const target = new URL(url);
 const headers = { "user-agent": USER_AGENT };
 const robots = await fetch(new URL("/robots.txt", target), { headers });
 if (robots.ok) {
   const agent = blockedBy(await robots.text(), target.pathname + target.search);
   if (agent) {
-    console.error(`${target.host} disallows this path for "${agent}" in robots.txt.\nNot fetching. Read it in a browser and save the text to ${out} by hand.`);
+    console.error(`${target.host} disallows this path for "${agent}" in robots.txt. Not fetched.\n${FALLBACK}`);
     process.exit(3);
   }
 } else if (robots.status !== 404) {
-  console.error(`could not read robots.txt (HTTP ${robots.status}); not fetching`);
+  console.error(`could not read robots.txt (HTTP ${robots.status}). Not fetched.\n${FALLBACK}`);
   process.exit(3);
 }
 
 const page = await fetch(target, { headers });
 if (!page.ok) {
-  console.error(`HTTP ${page.status} for ${url}. Do not retry with another user agent; save the text by hand instead.`);
+  console.error(`HTTP ${page.status} for ${url}.\n${FALLBACK}`);
   process.exit(4);
 }
 const text = toText(await page.text());
+// A page that builds its article in JavaScript answers 200 with only navigation and a footer:
+// few words, or plenty of words and almost no sentences.
+const wordCount = text.split(/\s+/).filter(Boolean).length;
+const sentences = (text.match(/[a-z,;)]{2}[.!?]\s/g) ?? []).length;
+if (wordCount < 300 || sentences * 150 < wordCount) {
+  console.error(`${url} returned ${wordCount} words in ${sentences} sentences: a page shell, not the article. Nothing written.\n${FALLBACK}`);
+  process.exit(5);
+}
 mkdirSync(dirname(resolve(out)), { recursive: true });
 writeFileSync(out, `${text}\n`);
 console.log(`${text.length} characters written to ${out}`);

@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-// Checks a card against the plain text of its source: every number and every locator must appear there.
+// Checks a card against the plain text of its source: every number, address and locator must appear there,
+// and no run of the source's own words may be carried into the card.
 // Usage: node scripts/check-source.mjs <card.yaml> <source.txt>
 import { readFileSync } from "node:fs";
 import { parse } from "yaml";
@@ -13,6 +14,15 @@ const card = parse(readFileSync(cardPath, "utf8"));
 const normalise = (s) => s.toLowerCase().replace(/[‘’]/g, "'").replace(/[“”]/g, '"').replace(/[–—]/g, "-").replace(/\s+/g, " ");
 const source = normalise(readFileSync(sourcePath, "utf8"));
 const sourceDigits = source.replace(/(\d),(?=\d{3})/g, "$1");
+// An address, a time or a decimal is one word, so 1.1.1.0/24 at 21:48 does not count as seven.
+const words = (s) => normalise(s).match(/[a-z0-9]+(?:[.:\/,'][a-z0-9]+)*/g) ?? [];
+const sourceWords = ` ${words(source).join(" ")} `;
+// A saved page this short is navigation or a sign-in wall, not an article.
+const MIN_SOURCE_WORDS = 300;
+// The rule is "no quotation beyond a few words". This is the backstop, set where a match is certainly a lifted passage and not a shared technical phrase.
+const COPIED_RUN = 12;
+// IP addresses, CIDR ranges and version numbers are names, not quantities: 1.1.1.1 is not the number 1.1 twice.
+const DOTTED = /\d+(?:\.\d+){2,}(?:\/\d+)?/g;
 
 // The ways a source might write a value: 4000, 4,000, 4k, 4 thousand, 2.5 million, 2.5m, 3bn.
 const WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten", "eleven", "twelve", "thirteen", "fourteen", "fifteen", "sixteen", "seventeen", "eighteen", "nineteen", "twenty"];
@@ -21,6 +31,8 @@ function numberForms(value) {
   for (const [divisor, suffixes] of [[1e3, ["k", " thousand"]], [1e6, ["m", " million", "mm"]], [1e9, ["b", "bn", " billion"]], [1e12, ["t", " trillion"]]]) {
     const scaled = value / divisor;
     if (scaled >= 1 && Number.isInteger(scaled * 100)) for (const s of suffixes) forms.push(`${scaled}${s}`);
+    // "five million", "twelve thousand"
+    if (WORDS[scaled]) forms.push(...suffixes.filter((s) => s.startsWith(" ")).map((s) => `${WORDS[scaled]}${s}`));
   }
   return forms;
 }
@@ -29,16 +41,37 @@ const hasNumber = (value, written = String(value)) =>
   [written, ...numberForms(value)].some((form) => new RegExp(`(^|[^\\d.])${form.replace(/[.]/g, "\\.")}(?!\\d|\\.\\d)`).test(sourceDigits));
 
 const problems = [];
+// A fact drawn from several passages names each one, joined by " | ".
+const MAX_LOCATOR_PARTS = 3;
 function checkLocator(locator, where) {
-  const match = /^(Section|Near):\s*(.+)$/.exec(locator);
-  if (!match) return; // page numbers and timestamps cannot be checked against text
-  const needle = normalise(match[2]).replace(/^"|"$/g, "");
-  if (!source.includes(needle)) problems.push(`${where}: locator text not found in source: ${locator}`);
-  if (match[1] === "Near" && needle.split(" ").length > 8) problems.push(`${where}: a Near locator may quote at most eight words`);
+  const parts = locator.split(" | ");
+  if (parts.length > MAX_LOCATOR_PARTS) problems.push(`${where}: a locator may name at most ${MAX_LOCATOR_PARTS} passages`);
+  for (const part of parts) {
+    const match = /^(Section|Near):\s*(.+)$/.exec(part.trim());
+    if (!match) {
+      // Page numbers and timestamps cannot be checked against text; anything else is a typo.
+      if (parts.length > 1 && !/^(Page|At) /.test(part.trim())) problems.push(`${where}: locator part is not Section:, Near:, Page or At: ${part.trim()}`);
+      continue;
+    }
+    const needle = normalise(match[2]).replace(/^"|"$/g, "");
+    if (!source.includes(needle)) problems.push(`${where}: locator text not found in source: ${part.trim()}`);
+    if (match[1] === "Near" && needle.split(" ").length > 8) problems.push(`${where}: a Near locator may quote at most eight words`);
+  }
 }
 function checkText(text, where) {
-  for (const token of text.replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(\.\d+)?/g) ?? []) {
+  for (const dotted of text.match(DOTTED) ?? []) {
+    if (!source.includes(dotted)) problems.push(`${where}: ${dotted} not found in source`);
+  }
+  for (const token of text.replace(DOTTED, " ").replace(/(\d),(?=\d{3})/g, "$1").match(/\d+(\.\d+)?/g) ?? []) {
     if (!hasNumber(Number(token), token)) problems.push(`${where}: number ${token} not found in source`);
+  }
+  const list = words(text);
+  for (let i = 0; i + COPIED_RUN <= list.length; i += 1) {
+    const run = list.slice(i, i + COPIED_RUN).join(" ");
+    if (sourceWords.includes(` ${run} `)) {
+      problems.push(`${where}: copies the source's wording ("${run} ..."); restate it in our own words`);
+      break;
+    }
   }
 }
 function checkFact(fact, where) {
@@ -47,7 +80,13 @@ function checkFact(fact, where) {
   checkLocator(fact.locator, where);
 }
 
+const rawSource = readFileSync(sourcePath, "utf8");
+const sourceSentences = (rawSource.match(/[a-z,;)]{2}[.!?]\s/g) ?? []).length;
+if (words(source).length < MIN_SOURCE_WORDS || sourceSentences * 150 < words(source).length) {
+  problems.push(`the saved source holds ${words(source).length} words in ${sourceSentences} sentences; that is a page shell or a sign-in wall, not the article. Fetch it again.`);
+}
 checkFact(card.architecture, "architecture");
+checkFact(card.later_update, "later_update");
 if (card.footprint) checkLocator(card.footprint.locator, "footprint");
 for (const component of card.components ?? []) {
   checkText(component.role, `component "${component.name}"`);

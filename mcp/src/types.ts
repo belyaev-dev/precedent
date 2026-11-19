@@ -91,6 +91,7 @@ export interface Card {
     publisher: string;
     author?: string;
     published: string;
+    published_note?: string;
     party: "first" | "third";
     retrieved_at: string;
     reuse_basis: string;
@@ -99,6 +100,8 @@ export interface Card {
   review: { extracted_by: string; reviewed_by: string; reviewed_at: string };
   status: "current" | "disputed";
   status_note?: string;
+  /** What the same source says changed after as_of. */
+  later_update?: Fact;
   records: CardRecord[];
 }
 
@@ -113,7 +116,7 @@ export interface Tombstone {
 
 export type Kind = "system" | "decision" | "failure";
 export const KINDS: readonly Kind[] = ["system", "decision", "failure"];
-export const FOOTPRINTS = ["single-node", "single-database", "partitioned", "multi-region"] as const;
+export const FOOTPRINTS = ["single-node", "single-database", "single-site", "partitioned", "multi-region"] as const;
 
 /** One searchable unit: a card as a whole (kind system) or one of its records. */
 export interface Doc {

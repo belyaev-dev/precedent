@@ -7,7 +7,8 @@
   "scripts": {
     "validate": "node scripts/validate.mjs",
     "bundle": "node scripts/bundle.mjs",
-    "check": "node scripts/validate.mjs && node scripts/bundle.mjs --check"
+    "test": "node --test scripts/",
+    "check": "node scripts/validate.mjs && node scripts/bundle.mjs --check && node --test scripts/"
   },
   "devDependencies": {
     "ajv": "^8.20.0",

@@ -22,6 +22,7 @@ export const KIND = { decision: "Decision", failure: "Failure" } as const;
 export const SETUP = {
   "single-node": "one server",
   "single-database": "one database",
+  "single-site": "one site",
   partitioned: "sharded",
   "multi-region": "multi-region",
 } as const;

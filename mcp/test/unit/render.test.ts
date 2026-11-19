@@ -111,6 +111,21 @@ describe("search response", () => {
     expect(show({ query: "transactional enqueue" })).toContain("review PENDING human review (machine-checked only)");
   });
 
+  it("prints the source's own later update with the card, with every record and in search, and the note on its date", () => {
+    const cards = fixtureCards();
+    const tiny = cards.find((card) => card.id === "tiny-2024-notes") as Card;
+    tiny.later_update = { text: "The author has since sold the product and moved it off this setup.", locator: "Near: since I wrote this article" };
+    tiny.source.published_note = "the page shows only a last-updated date";
+    const updated = buildIndex(cards, FIXTURE_VERSION, index.vocabulary);
+    const line = "SINCE CHANGED, by the source's own later note: The author has since sold the product and moved it off this setup. [Near: since I wrote this article]";
+    expect(renderGet(updated, ["tiny-2024-notes"]).text).toContain(line);
+    expect(renderGet(updated, ["tiny-2024-notes#d1"]).text).toContain(line);
+    expect(renderSearch(updated, search(updated, { query: "sqlite file" }), { kindGiven: false })).toContain(`   ${line}`);
+    expect(renderGet(updated, ["tiny-2024-notes"]).text).toMatch(/published \S+ \(the page shows only a last-updated date\) \|/);
+    // A card without one says nothing about it.
+    expect(get("tiny-2024-notes#d1")).not.toContain("SINCE CHANGED");
+  });
+
   it("keeps the machine-checked-only warning however the pending marker is spaced or cased", () => {
     for (const marker of [" PENDING human review", "pending", "\tPending review", "\u200bPENDING human review"]) {
       const cards = fixtureCards();

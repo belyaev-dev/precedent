@@ -24,7 +24,7 @@
   },
   "$defs": {
     "cardId": {
-      "description": "Permanent slug, equal to the file name without extension: <org>-<year>-<system>, where year is the as_of year (the publication year when as_of is null). When that slug is taken, append -2, -3 and so on; never rename a published card.",
+      "description": "Permanent slug, equal to the file name without extension: <org>-<year>-<system>, where year is the as_of year (the publication year when as_of is null; when the page shows only a last-updated date, that year, with source.published_note saying so). When that slug is taken, append -2, -3 and so on; never rename a published card.",
       "type": "string",
       "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
       "maxLength": 80
@@ -49,14 +49,14 @@
       "description": "Plain text in our own words. No markup, links or URLs.",
       "type": "string",
       "minLength": 1,
-      "maxLength": 400,
+      "maxLength": 500,
       "pattern": "^(?![\\s\\S]*(\\]\\(|://|`|<[A-Za-z/!]))[\\s\\S]*$"
     },
     "locator": {
-      "description": "Where in the source the statement is made, in a form check-source can verify: 'Section: <heading as written>', or 'Near: <up to eight consecutive words from the passage>' for sources without headings, or 'Page 7' / 'At 12:30' for papers and talks. A bare URL is not a locator.",
+      "description": "Where in the source the statement is made, in a form check-source can verify: 'Section: <heading as written>', or 'Near: <up to eight consecutive words from the passage>' for sources without headings or for a heading that appears twice, or 'Page 7' / 'At 12:30' for papers and talks. A fact drawn from more than one passage names each, at most three, joined by ' | ' (for example 'Section: Background | Near: twelve nodes with a replica factor'); every part of the fact must be supported by one of them. A bare URL is not a locator.",
       "type": "string",
       "minLength": 2,
-      "maxLength": 160,
+      "maxLength": 360,
       "pattern": "^(?!.*(\\]\\(|://|`|<[A-Za-z/!]))[^\\n]*$"
     },
     "fact": {
@@ -105,7 +105,8 @@
         "analytics-pipeline",
         "control-plane",
         "auth-session",
-        "coordination"
+        "coordination",
+        "traffic-routing"
       ]
     },
     "topic": {
@@ -158,7 +159,7 @@
       }
     },
     "scale": {
-      "description": "Tiers. traffic (peak requests or events per second on this system): 0 <10, 1 <100, 2 <1k, 3 <10k, 4 <100k, 5 100k+. data (total stored state of this system): 0 <10 GB, 1 <100 GB, 2 <1 TB, 3 <10 TB, 4 <100 TB, 5 100 TB+. team (engineers who build and operate this system): 0 up to 5, 1 up to 15, 2 up to 50, 3 up to 150, 4 over 150. Leave an axis null when the source supports no single tier: a lower bound alone (one table's size), a company-wide headcount, or the artificial load of a test harness on an experiment card. A card with every axis null has unknown scale: its records are returned by search in a separately labelled group and never as a match for the caller's tier.",
+      "description": "Tiers. traffic (peak requests or events per second on this system): 0 <10, 1 <100, 2 <1k, 3 <10k, 4 <100k, 5 100k+. data (total stored state of this system): 0 <10 GB, 1 <100 GB, 2 <1 TB, 3 <10 TB, 4 <100 TB, 5 100 TB+. team (engineers who build and operate this system): 0 up to 5, 1 up to 15, 2 up to 50, 3 up to 150, 4 over 150. Leave an axis null when the source supports no single tier: a lower bound that could sit in more than one tier (one table's size), a company-wide headcount above the lowest tier, or the artificial load of a test harness on an experiment card. A bound that lies wholly inside an end tier does pin it, as estimated with a note: a lower bound above the top tier's floor, or an upper bound within tier 0 (a whole company of four engineers). traffic is load on the operator's own system in normal service: requests absorbed by a third-party CDN, and a one-off abuse spike, are context and are tagged other. data counts each stored item once, not once per replica. A card with every axis null has unknown scale: its records are returned by search in a separately labelled group and never as a match for the caller's tier.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -408,7 +409,7 @@
           "$ref": "#/$defs/fact"
         },
         "rejected": {
-          "description": "Alternatives the source says were considered. Empty when it reports none; never invented.",
+          "description": "Alternatives the source says were considered. Empty when it reports none; never invented. The setup being replaced is not a rejected alternative: it goes in worked_before. An option the source only raises as a question a reader might ask was not considered.",
           "type": "array",
           "maxItems": 4,
           "items": {
@@ -507,7 +508,7 @@
           "$ref": "#/$defs/factOrNull"
         },
         "fix": {
-          "description": "What was changed. Begin with 'Planned:' when the source reports an intention, not a completed change.",
+          "description": "What was changed. Completed changes come first, stated plainly. Work the source reports as under way follows after 'In progress:', and intentions after 'Planned:'. A fix that is only an intention begins with 'Planned:'.",
           "$ref": "#/$defs/factOrNull"
         }
       }
@@ -548,8 +549,13 @@
           "$ref": "#/$defs/line"
         },
         "published": {
+          "description": "The publication date the page states, as precisely as it states it. When the page shows only a last-updated date, give that date and say so in published_note.",
           "type": "string",
           "pattern": "^[0-9]{4}(-(0[1-9]|1[0-2])(-(0[1-9]|[12][0-9]|3[01]))?)?$"
+        },
+        "published_note": {
+          "description": "Anything a reader must know to read the date correctly: that it is a last-updated date and the original is unstated, or that the URL and the page disagree. Served with the card.",
+          "$ref": "#/$defs/line"
         },
         "party": {
           "description": "first: written by people who built or operate the system, wherever it is published (a company blog, a personal blog, a guest post); required for production and incident cards. third: an independent tester or researcher reporting an experiment.",
@@ -739,6 +745,10 @@
         "status_note": {
           "$ref": "#/$defs/text"
         },
+        "later_update": {
+          "description": "What the same source says changed after as_of: the system was replaced, sold, shut down or rebuilt. Present only when the source itself reports it, typically in an update note added to the page. Served with the card and with every record, so that a superseded setup is never read as current.",
+          "$ref": "#/$defs/fact"
+        },
         "records": {
           "type": "array",
           "minItems": 1,
@@ -826,7 +836,7 @@
       }
     },
     "footprint": {
-      "description": "The deployed shape the source states, for systems where that says more about size than any number does. null when the source does not make it clear. single-node: the application and its data on one machine. single-database: one primary database (replicas allowed) behind any number of application servers. partitioned: data split across shards or several database clusters. multi-region: serving from more than one region.",
+      "description": "The deployed shape the source states, for systems where that says more about size than any number does. null when the source does not make it clear. single-node: the application and its data on one machine. single-database: one primary database (replicas allowed) behind any number of application servers. single-site: several machines in one region or data centre that fit neither of those and split no dataset, such as more than one datastore side by side, one replicated quorum cluster, or a fleet of servers with no database of its own. partitioned: one dataset split across shards or across several database clusters; several clusters that are per-environment copies or hold unrelated data are not a partition. multi-region: serving, or able to take over serving, from more than one region, cloud provider or data centre.",
       "type": [
         "object",
         "null"
@@ -841,6 +851,7 @@
           "enum": [
             "single-node",
             "single-database",
+            "single-site",
             "partitioned",
             "multi-region"
           ]

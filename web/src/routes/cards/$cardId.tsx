@@ -75,6 +75,7 @@ function Outline({ outline }: { outline: Extract<Found, { locked: true }>["outli
             <a href={outline.source.url}>{outline.source.title}</a>
             <p className="locator">
               {outline.source.publisher}, published {outline.source.published}
+              {outline.source.published_note && ` (${outline.source.published_note})`}
             </p>
           </Meta>
         </dl>
@@ -123,6 +124,12 @@ function CardPage({ card, version }: { card: Extract<Found, { locked: false }>["
             <span className="strong">Disputed.</span> {card.status_note}
           </p>
         )}
+        {card.later_update && (
+          <p className="notice">
+            <span className="strong">Since changed.</span> {card.later_update.text}
+            <span className="locator"> {card.later_update.locator}</span>
+          </p>
+        )}
 
         <dl className="meta">
           <Meta label="Organisation">{card.org}</Meta>
@@ -139,6 +146,7 @@ function CardPage({ card, version }: { card: Extract<Found, { locked: false }>["
             <a href={card.source.url}>{card.source.title}</a>
             <p className="locator">
               {card.source.publisher}, published {card.source.published}
+              {card.source.published_note && ` (${card.source.published_note})`}
             </p>
           </Meta>
         </dl>
