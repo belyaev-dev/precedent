@@ -746,7 +746,7 @@
           "$ref": "#/$defs/text"
         },
         "later_update": {
-          "description": "What the same source says changed after as_of: the system was replaced, sold, shut down or rebuilt. Present only when the source itself reports it, typically in an update note added to the page. Served with the card and with every record, so that a superseded setup is never read as current.",
+          "description": "What the same source says changed after as_of: the system was replaced, sold, shut down or rebuilt, or the behaviour the card describes was since fixed in the software it depends on. Present only when the source itself reports it, typically in an update note added to the page. Served with the card and with every record, so that a superseded setup is never read as current.",
           "$ref": "#/$defs/fact"
         },
         "records": {
