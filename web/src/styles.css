@@ -1212,3 +1212,60 @@ td .locator {
 .plan-line p {
   flex: 1 1 320px;
 }
+
+/* Admin */
+
+.admin-figures {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px 56px;
+  margin: 40px 0 0;
+}
+.admin-figures dd {
+  margin: 4px 0 0;
+  font-size: 32px;
+  font-weight: 300;
+  letter-spacing: -0.03em;
+}
+.admin-block {
+  margin-top: 64px;
+}
+.admin-block > p {
+  margin: 12px 0 20px;
+}
+.admin-block .table-scroll {
+  margin-top: 20px;
+}
+.admin td {
+  overflow-wrap: anywhere;
+}
+
+/* Privacy and terms */
+
+.prose {
+  max-width: 720px;
+}
+.prose h2 {
+  margin: 48px 0 0;
+  padding-top: 20px;
+  border-top: 1px solid var(--ink);
+  font-size: 24px;
+  font-weight: 400;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+}
+.prose p,
+.prose ul {
+  margin: 16px 0 0;
+}
+.prose ul {
+  padding-left: 20px;
+}
+.prose li + li {
+  margin-top: 8px;
+}
+
+.account-foot {
+  margin: 24px 0 0;
+  color: var(--grey);
+}

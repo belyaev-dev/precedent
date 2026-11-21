@@ -24,7 +24,8 @@ export const getLanding = createServerFn({ method: "GET" }).handler(async () => 
     reviewedCards: cards.filter(isReviewed).length,
     records: entries.length,
     decisions: entries.filter(({ record }) => record.kind === "decision").length,
-    groups: workloadGroups(),
+    // One square per record: only what a square shows and links to.
+    groups: workloadGroups().map(({ name, cards, rows }) => ({ name, cards, rows: rows.map(({ cardId, recordId, kind, title }) => ({ cardId, recordId, kind, title })) })),
     orgs,
     featured: { cite: `${featured.card.id}#${featured.record.id}`, record: featured.record, source: featured.card.source },
   };

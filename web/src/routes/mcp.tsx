@@ -4,11 +4,11 @@ import { Cite } from "../components/Cite";
 import { CopyButton } from "../components/CopyButton";
 import { INSTALL } from "../components/Snippet";
 import { getMcpExample } from "../corpus/api";
-import { PLANS, count } from "../site";
+import { PLANS, count, pageHead } from "../site";
 
 export const Route = createFileRoute("/mcp")({
   loader: () => getMcpExample(),
-  head: () => ({ meta: [{ title: "MCP: Precedent" }] }),
+  head: () => pageHead("MCP: Precedent", "Connect a coding agent to Precedent over MCP: three read-only tools that search and fetch records of how real systems were built and how they failed."),
   component: Mcp,
 });
 

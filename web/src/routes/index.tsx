@@ -182,7 +182,7 @@ function Landing() {
               <div className="squares">
                 {group.rows.map((row) => (
                   <Link
-                    key={row.cite}
+                    key={`${row.cardId}#${row.recordId}`}
                     className={row.kind === "failure" ? "failure" : undefined}
                     to="/cards/$cardId"
                     params={{ cardId: row.cardId }}

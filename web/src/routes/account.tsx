@@ -3,11 +3,11 @@ import { useState, type FormEvent } from "react";
 import { createKey, getAccount, requestPro } from "../account/api";
 import { authClient } from "../auth-client";
 import { CopyButton } from "../components/CopyButton";
-import { PLANS, count } from "../site";
+import { PLANS, count, pageHead } from "../site";
 
 export const Route = createFileRoute("/account")({
   loader: () => getAccount(),
-  head: () => ({ meta: [{ title: "Account: Precedent" }] }),
+  head: () => pageHead("Account: Precedent"),
   component: AccountPage,
 });
 
@@ -86,6 +86,13 @@ function SignedIn({ account }: { account: Extract<Account, { signedIn: true }> }
     await authClient.signOut();
     router.invalidate();
   };
+  const [problem, setProblem] = useState<string>();
+  const deleteAccount = async () => {
+    if (!window.confirm("Delete your account? Your key stops working and your usage records are removed. This cannot be undone.")) return;
+    const { error } = await authClient.deleteUser();
+    if (error) return setProblem(error.code === "SESSION_EXPIRED" ? "Sign out, sign in again, then delete: this needs a recent sign-in." : (error.message ?? "The account could not be deleted."));
+    router.invalidate();
+  };
   const askForPro = async () => {
     await requestPro();
     router.invalidate();
@@ -157,6 +164,12 @@ function SignedIn({ account }: { account: Extract<Account, { signedIn: true }> }
           )}
         </div>
       </section>
+
+      <p className="account-foot">
+        What is kept about an account is in the <Link to="/privacy">privacy notice</Link>.{" "}
+        <button className="link" type="button" onClick={deleteAccount}>Delete this account</button>
+        {problem && <span role="alert"> {problem}</span>}
+      </p>
     </>
   );
 }

@@ -70,3 +70,27 @@ export async function spendCall(userId: string, plan: PlanName) {
     .first();
   return counted !== null;
 }
+
+const TOOLS = new Set(["precedent_search", "precedent_get", "precedent_facets"]);
+
+/**
+ * Records one tool call for the operator's usage page: the tool, what was asked (a search's query and filters, or
+ * the ids fetched) and the counts the engine reported. The privacy page says this is kept, and for how long.
+ */
+export async function recordCall(userId: string, params: unknown, counted: Record<string, unknown> | null, client: string | null) {
+  const { name, arguments: asked } = (params ?? {}) as { name?: unknown; arguments?: unknown };
+  const number = (value: unknown) => (typeof value === "number" ? value : null);
+  await env.DB.prepare(`insert into "call" ("at", "userId", "tool", "asked", "matched", "shown", "atScale", "client") values (?, ?, ?, ?, ?, ?, ?, ?)`)
+    .bind(
+      new Date().toISOString(),
+      userId,
+      typeof name === "string" && TOOLS.has(name) ? name : "other",
+      asked && typeof asked === "object" ? JSON.stringify(asked).slice(0, 1000) : null,
+      // A get reports how many of the ids it found; a search how many records matched and how many it showed.
+      number(counted?.matched ?? counted?.asked),
+      number(counted?.shown ?? counted?.found),
+      number(counted?.at_scale),
+      client?.slice(0, 120) ?? null,
+    )
+    .run();
+}

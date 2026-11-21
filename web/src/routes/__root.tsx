@@ -2,21 +2,30 @@
 import { HeadContent, Link, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 import { getSiteInfo } from "../corpus/api";
-import { REPO } from "../site";
+import { DESCRIPTION, REPO, SITE_URL, pageHead } from "../site";
 import styles from "../styles.css?url";
 
 export const Route = createRootRoute({
   loader: () => getSiteInfo(),
   // The star count changes slowly, so moving between pages does not ask for it again.
   staleTime: 10 * 60 * 1000,
-  head: () => ({
+  // A page's own head replaces the title and description here; the rest holds for every page.
+  head: ({ matches }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Precedent: evidence for system design" },
-      { name: "description", content: "Records of how real production systems were built and how they failed, served to coding agents over MCP." },
+      ...pageHead("Precedent: evidence for system design", DESCRIPTION).meta,
+      { property: "og:site_name", content: "Precedent" },
+      { property: "og:type", content: "website" },
+      { property: "og:url", content: SITE_URL + matches[matches.length - 1].pathname.replace(/(.)\/$/, "$1") },
+      { property: "og:image", content: `${SITE_URL}/og.png` },
+      { property: "og:image:width", content: "1200" },
+      { property: "og:image:height", content: "630" },
+      { property: "og:image:alt", content: "Precedent: your agent designs from memory. Give it evidence." },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
+      { rel: "canonical", href: SITE_URL + matches[matches.length - 1].pathname.replace(/(.)\/$/, "$1") },
       { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
@@ -80,6 +89,8 @@ function Document({ children }: { children: ReactNode }) {
             <span>Precedent, corpus version {version}.</span>
             <nav aria-label="Footer">
               <SiteLinks mark={false} />
+              <Link to="/privacy">Privacy</Link>
+              <Link to="/terms">Terms</Link>
             </nav>
           </div>
         </footer>

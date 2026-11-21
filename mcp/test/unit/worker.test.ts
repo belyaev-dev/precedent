@@ -334,6 +334,15 @@ describe("what is logged", () => {
     expect(logged).toEqual(['{"event":"refused","reason":"rate_limit"}']);
   });
 
+  it("hands the same counts back in a header for the website to record, and only for a tool call", async () => {
+    const searched = await call("precedent_search", { query: "tarpit" }, {}, withFixtures());
+    expect(JSON.parse(searched.headers.get("x-precedent-call")!)).toMatchObject({ event: "search", matched: expect.any(Number), shown: expect.any(Number) });
+    const got = await call("precedent_get", { ids: ["no-such-card"] }, {}, withFixtures());
+    expect(JSON.parse(got.headers.get("x-precedent-call")!)).toMatchObject({ event: "get", asked: 1, found: 0 });
+    const listed = await post({ jsonrpc: "2.0", id: 2, method: "tools/list" });
+    expect(listed.headers.has("x-precedent-call")).toBe(false);
+  });
+
   it("names known methods and lumps everything else together, so caller-supplied text never reaches the log", async () => {
     await post({ jsonrpc: "2.0", id: 1, method: "tools/list" });
     await post({ jsonrpc: "2.0", id: 2, method: "resources/read-my-secret-payload" });

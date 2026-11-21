@@ -1,9 +1,9 @@
 import { Link, createFileRoute } from "@tanstack/react-router";
 import { Cite } from "../components/Cite";
-import { PLANS, REPO, WAITLIST_URL, count } from "../site";
+import { PLANS, REPO, WAITLIST_URL, count, pageHead } from "../site";
 
 export const Route = createFileRoute("/pricing")({
-  head: () => ({ meta: [{ title: "Pricing: Precedent" }] }),
+  head: () => pageHead("Pricing: Precedent", "Precedent is free to try with 1,000 tool calls a month. Pro, for daily use, is not open yet."),
   component: Pricing,
 });
 
