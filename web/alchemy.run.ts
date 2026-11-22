@@ -35,12 +35,15 @@ export default Alchemy.Stack(
   { providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()), state: process.env.PRECEDENT_LOCAL_STATE ? Alchemy.localState() : Cloudflare.state() },
   Effect.gen(function* () {
     const live = (yield* Alchemy.Stage) === "prod";
+    // Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. Cloudflare's automatic
+    // injection was not adding the script to these pages, so the website embeds it, with this site's token. The zone already had a
+    // Web Analytics site, so the stack takes that one over instead of making a second.
+    const analytics = live
+      ? yield* Cloudflare.Rum.Site("Analytics", { zoneTag: Cloudflare.Zone.Zone.lookup({ name: DOMAIN }).zoneId, autoInstall: false }).pipe(adopt(true))
+      : undefined;
     if (live) {
       const zone = Cloudflare.Zone.Zone.lookup({ name: DOMAIN });
       yield* Cloudflare.Email.SendingSubdomain("Mail", { zoneId: zone.zoneId, name: MAIL_DOMAIN });
-      // Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. The script is added at the edge.
-      // The zone already had a Web Analytics site, so the stack takes that one over instead of making a second.
-      yield* Cloudflare.Rum.Site("Analytics", { zoneTag: zone.zoneId, autoInstall: true }).pipe(adopt(true));
     }
     if (live) {
       // What the cards repository's workflow needs to upload: a token that can write R2 objects and nothing else.
@@ -89,6 +92,7 @@ export default Alchemy.Stack(
         GITHUB_CLIENT_ID: optionalSecret("GITHUB_CLIENT_ID"),
         GITHUB_CLIENT_SECRET: optionalSecret("GITHUB_CLIENT_SECRET"),
         ADMIN_GITHUB_IDS,
+        ANALYTICS_TOKEN: analytics?.siteToken ?? "",
         // Every request to /api/mcp, with a key or without, per client address: above the engine's own limit, so it
         // only stops what never reaches the engine, such as guesses at a key.
         LIMITER: Cloudflare.RateLimit("LIMITER", { namespaceId: 1002, simple: { limit: 300, period: 60 } }),

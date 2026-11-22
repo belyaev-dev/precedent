@@ -10,7 +10,7 @@ export const Route = createRootRoute({
   // The star count changes slowly, so moving between pages does not ask for it again.
   staleTime: 10 * 60 * 1000,
   // A page's own head replaces the title and description here; the rest holds for every page.
-  head: ({ matches }) => ({
+  head: ({ matches, loaderData }) => ({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
@@ -32,6 +32,10 @@ export const Route = createRootRoute({
       { rel: "stylesheet", href: "https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500&family=Geist+Mono:wght@400;500&display=swap" },
       { rel: "stylesheet", href: styles },
     ],
+    // Cloudflare Web Analytics: no cookies. Present only where a token is configured, which is production.
+    scripts: loaderData?.analyticsToken
+      ? [{ src: "https://static.cloudflareinsights.com/beacon.min.js", defer: true, "data-cf-beacon": JSON.stringify({ token: loaderData.analyticsToken }) }]
+      : [],
   }),
   component: Root,
   notFoundComponent: NotFound,

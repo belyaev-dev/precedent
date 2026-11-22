@@ -17,6 +17,8 @@ export interface Env {
   GITHUB_CLIENT_SECRET?: string;
   // Counts requests to /api/mcp per client address. Absent where no limiter is bound; the endpoint then serves without one.
   LIMITER?: RateLimit;
+  // The Cloudflare Web Analytics site's token, which is public: it is in every page. Empty outside production.
+  ANALYTICS_TOKEN?: string;
   // Comma-separated GitHub account ids of the people who may open /admin and who are sent the daily digest.
   ADMIN_GITHUB_IDS?: string;
 }

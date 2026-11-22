@@ -1,6 +1,7 @@
 // What the pages ask the server for. Each function returns only what its page shows.
 import { notFound } from "@tanstack/react-router";
 import { createServerFn } from "@tanstack/react-start";
+import { env } from "../server/env";
 import { currentUser } from "../server/session";
 import { repoStars } from "../server/stars";
 import { FREE_RESULTS } from "../site";
@@ -8,7 +9,7 @@ import { corpus, isReviewed, sampleIds, type Query } from "./store.server";
 import type { RecordRow } from "./types";
 
 // What the header and footer of every page show.
-export const getSiteInfo = createServerFn({ method: "GET" }).handler(async () => ({ version: (await corpus()).version, stars: await repoStars() }));
+export const getSiteInfo = createServerFn({ method: "GET" }).handler(async () => ({ version: (await corpus()).version, stars: await repoStars(), analyticsToken: env.ANALYTICS_TOKEN || null }));
 
 export const getCorpusVersion = createServerFn({ method: "GET" }).handler(async () => (await corpus()).version);
 
