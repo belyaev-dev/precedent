@@ -13,11 +13,12 @@ jobs:
       - name: Pages answer with their content
         run: |
           set -euo pipefail
+          # grep reads to the end here: one that stops at its first match makes curl fail on a closed pipe.
           get() { curl --fail --silent --show-error --max-time 20 --retry 2 --retry-delay 5 "https://precedents.dev$1"; }
-          get / | grep -q "Give it evidence"
-          get /cards | grep -q "records"
-          get /cards/notion-2021-postgres-sharding | grep -q "Notion"
-          get /sitemap.xml | grep -q "<urlset"
+          get / | grep >/dev/null "Give it evidence"
+          get /cards | grep >/dev/null "records"
+          get /cards/notion-2021-postgres-sharding | grep >/dev/null "Notion"
+          get /sitemap.xml | grep >/dev/null "<urlset"
       - name: The MCP address refuses a call without a key, in JSON
         run: |
           set -euo pipefail
@@ -35,4 +36,4 @@ jobs:
           curl --fail --silent --show-error --max-time 20 --retry 2 -X POST https://precedents.dev/api/mcp \
             -H "authorization: Bearer $PRECEDENT_KEY" -H 'content-type: application/json' -H 'accept: application/json, text/event-stream' \
             -H 'user-agent: precedent-live-check' \
-            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | grep -q "precedent_search"
+            -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}' | grep >/dev/null "precedent_search"
