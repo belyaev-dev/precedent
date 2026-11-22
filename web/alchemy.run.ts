@@ -4,7 +4,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
-import { adopt } from "alchemy/AdoptPolicy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -19,6 +18,10 @@ const ADMIN_GITHUB_IDS = "74226935";
 // Both Workers keep their own log lines. Cloudflare's per-request line (URL, address, user agent) is kept for the
 // website only, where it is what an error is traced with; the engine's lines stay counts and nothing else.
 const logs = (invocationLogs: boolean) => ({ enabled: true, logs: { enabled: true, invocationLogs }, traces: { enabled: false } });
+// Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. The site was made in the
+// Cloudflare dashboard for the zone and is not managed by this stack; this is its token, which is public (it is in
+// every page). Cloudflare was not adding its script to these pages by itself, so the website embeds it.
+const ANALYTICS_TOKEN = "7ad32a623afe481a95599768271fc843";
 const CARDS_REPO = { owner: "belyaev-dev", repository: "precedent-cards" };
 
 export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
@@ -35,12 +38,6 @@ export default Alchemy.Stack(
   { providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()), state: process.env.PRECEDENT_LOCAL_STATE ? Alchemy.localState() : Cloudflare.state() },
   Effect.gen(function* () {
     const live = (yield* Alchemy.Stage) === "prod";
-    // Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. Cloudflare's automatic
-    // injection was not adding the script to these pages, so the website embeds it, with this site's token. The zone already had a
-    // Web Analytics site, so the stack takes that one over instead of making a second.
-    const analytics = live
-      ? yield* Cloudflare.Rum.Site("Analytics", { zoneTag: Cloudflare.Zone.Zone.lookup({ name: DOMAIN }).zoneId, autoInstall: false }).pipe(adopt(true))
-      : undefined;
     if (live) {
       const zone = Cloudflare.Zone.Zone.lookup({ name: DOMAIN });
       yield* Cloudflare.Email.SendingSubdomain("Mail", { zoneId: zone.zoneId, name: MAIL_DOMAIN });
@@ -92,7 +89,7 @@ export default Alchemy.Stack(
         GITHUB_CLIENT_ID: optionalSecret("GITHUB_CLIENT_ID"),
         GITHUB_CLIENT_SECRET: optionalSecret("GITHUB_CLIENT_SECRET"),
         ADMIN_GITHUB_IDS,
-        ANALYTICS_TOKEN: analytics?.siteToken ?? "",
+        ANALYTICS_TOKEN: live ? ANALYTICS_TOKEN : "",
         // Every request to /api/mcp, with a key or without, per client address: above the engine's own limit, so it
         // only stops what never reaches the engine, such as guesses at a key.
         LIMITER: Cloudflare.RateLimit("LIMITER", { namespaceId: 1002, simple: { limit: 300, period: 60 } }),
