@@ -36,7 +36,13 @@ export async function handleMcp(request: Request) {
   // A brake on one address hammering the endpoint, with or without a key, before anything is read from the database.
   // The address is the counting key and nothing else. If the limiter itself fails, the request is served.
   const address = request.headers.get("cf-connecting-ip");
-  if (env.LIMITER && address && !(await env.LIMITER.limit({ key: address }).then((outcome) => outcome.success, () => true))) return tooMany();
+  if (env.LIMITER && address) {
+    const allowed = await env.LIMITER.limit({ key: address }).then(
+      (outcome) => outcome.success,
+      (error) => (console.error(JSON.stringify({ event: "error", name: "limiter", message: String(error) })), true),
+    );
+    if (!allowed) return tooMany();
+  }
 
   const key = request.headers.get("authorization")?.match(/^Bearer\s+(.+)$/i)?.[1];
   const owner = key ? await ownerOfKey(key) : null;

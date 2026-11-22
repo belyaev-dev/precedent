@@ -4,6 +4,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -38,7 +39,8 @@ export default Alchemy.Stack(
       const zone = Cloudflare.Zone.Zone.lookup({ name: DOMAIN });
       yield* Cloudflare.Email.SendingSubdomain("Mail", { zoneId: zone.zoneId, name: MAIL_DOMAIN });
       // Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. The script is added at the edge.
-      yield* Cloudflare.Rum.Site("Analytics", { zoneTag: zone.zoneId, autoInstall: true });
+      // The zone already had a Web Analytics site, so the stack takes that one over instead of making a second.
+      yield* Cloudflare.Rum.Site("Analytics", { zoneTag: zone.zoneId, autoInstall: true }).pipe(adopt(true));
     }
     if (live) {
       // What the cards repository's workflow needs to upload: a token that can write R2 objects and nothing else.
