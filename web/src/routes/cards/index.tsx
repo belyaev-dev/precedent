@@ -1,7 +1,7 @@
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
 import { Cite } from "../../components/Cite";
 import { getCorpusVersion, searchRecords } from "../../corpus/api";
-import { KIND, SETUP, sentence } from "../../site";
+import { KIND, SETUP, pageHead, sentence } from "../../site";
 
 interface CatalogueSearch {
   q?: string;
@@ -29,7 +29,7 @@ export const Route = createFileRoute("/cards/")({
   }),
   loaderDeps: ({ search }) => search,
   loader: async ({ deps }) => ({ ...(await searchRecords({ data: deps })), version: await getCorpusVersion() }),
-  head: () => ({ meta: [{ title: "Catalogue: Precedent" }] }),
+  head: () => pageHead("Catalogue: Precedent", "Every decision and failure record in the Precedent corpus, searchable by workload, kind and deployed shape."),
   component: Catalogue,
 });
 

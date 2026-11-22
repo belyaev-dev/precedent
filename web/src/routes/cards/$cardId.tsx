@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { CopyButton } from "../../components/CopyButton";
 import { RecordFields } from "../../components/RecordFields";
 import { getCard, getCorpusVersion } from "../../corpus/api";
-import { KIND, SETUP, sentence } from "../../site";
+import { KIND, SETUP, pageHead, plural, sentence } from "../../site";
 
 const EVIDENCE = { production: "Reported from production", incident: "Incident report", experiment: "Experiment" };
 
@@ -13,7 +13,8 @@ export const Route = createFileRoute("/cards/$cardId")({
     if (!loaderData) return {};
     const { found } = loaderData;
     const title = found.locked ? found.outline.title : found.card.title;
-    return { meta: [{ title: `${title}: Precedent` }, ...(found.locked ? [] : [{ name: "description", content: found.card.architecture.text }])] };
+    const about = found.locked ? `${found.outline.org}: ${found.outline.system}. ${plural(found.outline.records.length, "record")} of what was decided and what failed.` : found.card.architecture.text;
+    return pageHead(`${title}: Precedent`, about);
   },
   component: CardRoute,
 });

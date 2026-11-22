@@ -89,7 +89,7 @@ The skill carries the method and the sample cards. It reaches the corpus through
 
 Two Cloudflare Workers, declared together in [`web/alchemy.run.ts`](web/alchemy.run.ts):
 
-- **The website**, in [`web/`](web/): a [TanStack Start](https://tanstack.com/start) app at precedents.dev. It holds accounts ([Better Auth](https://better-auth.com) on D1, with GitHub and magic-link sign-in), one API key per user and a monthly count of tool calls. Its `/api/mcp` route is the public MCP address: it checks the key, counts the call and passes the request on.
+- **The website**, in [`web/`](web/): a [TanStack Start](https://tanstack.com/start) app at precedents.dev. It holds accounts ([Better Auth](https://better-auth.com) on D1, with GitHub and magic-link sign-in), one API key per user and a monthly count of tool calls. Its `/api/mcp` route is the public MCP address: it checks the key, counts the call, passes the request on and records the call.
 - **The MCP engine**, in [`mcp/`](mcp/): the search and the three tools. It has no public address and is reachable only from the website's Worker.
 
 Both read the compiled corpus from the private `precedent-corpus` R2 bucket about once a minute, and fall back to the sample cards bundled at build time. Card text reaches a browser only through the website's server, never in its JavaScript. The sample cards are readable by anyone; every other card is shown in full to a signed-in reader and as an outline to everyone else.
@@ -99,6 +99,15 @@ Both read the compiled corpus from the private `precedent-corpus` R2 bucket abou
 - Every result carries a ready citation, each fact's locator, "not stated in the source" for gaps, the card's review status and the corpus version. Withdrawn ids resolve to a notice.
 
 Tool parameters, example responses, limits and measurements are in [`mcp/README.md`](mcp/README.md). Plan limits are in [`web/src/site.ts`](web/src/site.ts).
+
+### Who uses it
+
+- **Visitors**: Cloudflare Web Analytics on the zone, declared in the stack. No cookies; pages, referrers and countries are in the Cloudflare dashboard.
+- **Accounts and calls**: every tool call is recorded in D1 against the key's account, with the tool, the search's words and filters (or the ids fetched), how many records matched and the client's user agent. Rows are deleted after 90 days. [precedents.dev/privacy](https://precedents.dev/privacy) says so to users, and must be changed with the code.
+- **The usage page**, `/admin`: accounts, keys in use, calls per day, the clients that call, the most searched queries, and the searches that found nothing or nothing at the caller's scale. It is open to the GitHub accounts listed as `ADMIN_GITHUB_IDS` in [`web/alchemy.run.ts`](web/alchemy.run.ts), signed in with GitHub; to anyone else it is a 404.
+- **A daily email** to those accounts at 06:00 UTC with the previous day's numbers, sent by the website Worker's cron trigger, which also deletes the rows past their keeping time.
+- **Whether it is up**: the [`live`](.github/workflows/live.yml) workflow asks the site and the MCP address every half hour, and GitHub emails the repository's owner when a run fails. With a key in the repository's `PRECEDENT_KEY` secret it also checks a keyed request.
+- **Errors**: both Workers write to Workers Logs.
 
 ## Corrections and removal
 

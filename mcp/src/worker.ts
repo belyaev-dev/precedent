@@ -2,6 +2,7 @@
 // outbound requests. It is an internal engine with no public route and does no authentication: the website
 // Worker checks keys and quotas and forwards MCP requests to it over a service binding. What it serves is
 // the compiled index in the CORPUS bucket, re-read at most once a minute; without one, the bundled index.
+import { AsyncLocalStorage } from "node:async_hooks";
 import { McpServer } from "@modelcontextprotocol/server";
 import { createMcpHandler } from "agents/mcp/server";
 import { limiterKey } from "./address.ts";
@@ -51,7 +52,16 @@ const CORS_HEADERS = {
 // Methods worth counting by name. Anything else a caller sends is logged as "other", never verbatim.
 const KNOWN_METHODS = new Set(["initialize", "server/discover", "ping", "tools/list", "tools/call", "subscriptions/listen", "notifications/initialized", "notifications/cancelled"]);
 
-const log: Log = (entry) => console.log(JSON.stringify(entry));
+// What the tool called by the request being served counted, kept so that the response can carry it to the
+// website, which records usage per key. Counts only, the same ones as the log line.
+const CALL_HEADER = "x-precedent-call";
+const calls = new AsyncLocalStorage<{ counted?: Record<string, string | number> }>();
+
+const log: Log = (entry) => {
+  console.log(JSON.stringify(entry));
+  const call = calls.getStore();
+  if (call && ["search", "get", "facets"].includes(String(entry.event))) call.counted = entry;
+};
 
 const corpus = corpusSource({ bundled: generated as unknown as CorpusIndex, log });
 
@@ -182,6 +192,10 @@ export default {
 
     // The body has been read, so hand the handler a request that carries everything but the body.
     const bodiless = new Request(request.url, { method: "POST", headers: request.headers, signal: request.signal });
-    return finished((await mcp(env, ctx, url.hostname)).fetch(bodiless, { parsedBody: message }));
+    const handler = await mcp(env, ctx, url.hostname);
+    const call: { counted?: Record<string, string | number> } = {};
+    const response = await calls.run(call, () => finished(handler.fetch(bodiless, { parsedBody: message })));
+    if (call.counted) response.headers.set(CALL_HEADER, JSON.stringify(call.counted));
+    return response;
   },
 };

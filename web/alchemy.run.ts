@@ -4,6 +4,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as GitHub from "@alchemy.run/github";
 import * as Alchemy from "alchemy";
+import { adopt } from "alchemy/AdoptPolicy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -13,6 +14,11 @@ const DOMAIN = "precedents.dev";
 const MAIL_DOMAIN = `mail.${DOMAIN}`;
 const DEV_PORT = 4173;
 // The private repository whose workflow compiles the cards and uploads them to the bucket.
+// GitHub account ids (the number, not the login) of the people who may open /admin and who get the daily digest.
+const ADMIN_GITHUB_IDS = "74226935";
+// Both Workers keep their own log lines. Cloudflare's per-request line (URL, address, user agent) is kept for the
+// website only, where it is what an error is traced with; the engine's lines stay counts and nothing else.
+const logs = (invocationLogs: boolean) => ({ enabled: true, logs: { enabled: true, invocationLogs }, traces: { enabled: false } });
 const CARDS_REPO = { owner: "belyaev-dev", repository: "precedent-cards" };
 
 export const Database = Cloudflare.D1.Database("Database", { migrations: "./migrations" });
@@ -29,6 +35,12 @@ export default Alchemy.Stack(
   { providers: Layer.mergeAll(Cloudflare.providers(), GitHub.providers()), state: process.env.PRECEDENT_LOCAL_STATE ? Alchemy.localState() : Cloudflare.state() },
   Effect.gen(function* () {
     const live = (yield* Alchemy.Stage) === "prod";
+    // Cloudflare Web Analytics: visitors, referrers and pages, counted without cookies. Cloudflare's automatic
+    // injection was not adding the script to these pages, so the website embeds it, with this site's token. The zone already had a
+    // Web Analytics site, so the stack takes that one over instead of making a second.
+    const analytics = live
+      ? yield* Cloudflare.Rum.Site("Analytics", { zoneTag: Cloudflare.Zone.Zone.lookup({ name: DOMAIN }).zoneId, autoInstall: false }).pipe(adopt(true))
+      : undefined;
     if (live) {
       const zone = Cloudflare.Zone.Zone.lookup({ name: DOMAIN });
       yield* Cloudflare.Email.SendingSubdomain("Mail", { zoneId: zone.zoneId, name: MAIL_DOMAIN });
@@ -52,12 +64,23 @@ export default Alchemy.Stack(
       main: "../mcp/src/worker.ts",
       workersDev: false,
       compatibility: { date: "2026-11-01", flags: ["nodejs_compat"] },
-      env: { CORPUS: Corpus, ALLOWED_HOSTNAMES: DOMAIN },
+      observability: logs(false),
+      env: {
+        CORPUS: Corpus,
+        ALLOWED_HOSTNAMES: DOMAIN,
+        // A brake on a client stuck in a loop: 120 calls a minute per client address. mcp/README.md says how it was chosen.
+        RATE_LIMITER: Cloudflare.RateLimit("RATE_LIMITER", { namespaceId: 1001, simple: { limit: 120, period: 60 } }),
+      },
     });
 
     const website = yield* Cloudflare.Website.Vite("Website", {
       domain: live ? { name: DOMAIN } : undefined,
       dev: { port: DEV_PORT },
+      // TanStack Start's handler plus the daily timer below.
+      main: "src/server.ts",
+      // 06:00 UTC: delete what is past its keeping time and email the admins yesterday's numbers.
+      crons: ["0 6 * * *"],
+      observability: logs(true),
       env: {
         DB: Database,
         CORPUS: Corpus,
@@ -68,6 +91,11 @@ export default Alchemy.Stack(
         BETTER_AUTH_SECRET: authSecret.text,
         GITHUB_CLIENT_ID: optionalSecret("GITHUB_CLIENT_ID"),
         GITHUB_CLIENT_SECRET: optionalSecret("GITHUB_CLIENT_SECRET"),
+        ADMIN_GITHUB_IDS,
+        ANALYTICS_TOKEN: analytics?.siteToken ?? "",
+        // Every request to /api/mcp, with a key or without, per client address: above the engine's own limit, so it
+        // only stops what never reaches the engine, such as guesses at a key.
+        LIMITER: Cloudflare.RateLimit("LIMITER", { namespaceId: 1002, simple: { limit: 300, period: 60 } }),
       },
     });
     return { url: website.url };
